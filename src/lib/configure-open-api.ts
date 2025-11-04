@@ -1,4 +1,5 @@
 import { Scalar } from '@scalar/hono-api-reference'
+import { API_START_POINT } from '~/config/constants'
 import type { AppOpenAPI } from '~/types'
 
 export default function configureOpenAPI(app: AppOpenAPI) {
@@ -8,6 +9,12 @@ export default function configureOpenAPI(app: AppOpenAPI) {
       version: '1',
       title: 'API Docs',
     },
+    servers: [
+      {
+        url: API_START_POINT,
+        description: 'API v1',
+      },
+    ],
   })
 
   app.get(

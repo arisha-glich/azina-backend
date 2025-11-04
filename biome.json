@@ -32,10 +32,7 @@
         "useFilenamingConvention": {
           "level": "error",
           "options": {
-            "filenameCases": [
-              "kebab-case",
-              "snake_case"
-            ]
+            "filenameCases": ["kebab-case", "snake_case"]
           }
         }
       },
@@ -63,15 +60,9 @@
       "trailingCommas": "es5",
       "arrowParentheses": "asNeeded"
     },
-    "globals": [
-      "Prisma",
-      "Hono"
-    ]
+    "globals": ["Prisma", "Hono"]
   },
   "files": {
-    "includes": [
-      "./src/**",
-      "tests"
-    ]
+    "includes": ["./src/**", "tests"]
   }
 }

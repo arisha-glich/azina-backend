@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma"
@@ -20,11 +17,601 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Patient {
+  id                  String            @id @default(cuid())
+  user_id             String            @unique
+  user                User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  date_of_birth       DateTime?
+  gender              String?
+  phone_number        String?
+  emergency_contact   String?
+  medical_history     String?
+  allergies           String?
+  current_medications String?
+  insurance_provider  String?
+  insurance_policy_id String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  addresses           Address[]
+  appointments        Appointment[]
+  medical_details     Medical_Details[]
+  prescriptions       Prescription[]
+  refunds             Refund[]
+  reviews             Review[]
+  bookings            Booking[]
+  cart_items          Cart[]
+  orders              Order[]
+  conditions          Condition[]
+
+  @@map("patient")
+}
+
+model Doctor {
+  id                  String             @id @default(cuid())
+  user_id             String             @unique
+  user                User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  specialization      String
+  license_number      String             @unique
+  experience_years    Int?
+  bio                 String?
+  consultation_fee    Float?
+  availability_status String             @default("AVAILABLE")
+  phone_no            String?
+  professional_email  String?
+  regulatoryBody      String?
+  professional        String?
+  areas_of_expertise  Json?
+  resume              Json?
+  idemnityInsaurance  Json?
+  other_documents     Json?
+  signature           Json?
+  Logo                Json?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  clinic_id           String?
+  clinic              Clinic?            @relation(fields: [clinic_id], references: [id])
+  appointments        Appointment[]
+  appointment_slots   Appointment_Slot[]
+  medical_details     Medical_Details[]
+  prescriptions       Prescription[]
+  reviews             Review[]
+  services            Service[]
+
+  @@map("doctor")
+}
+
+model Clinic {
+  id          String   @id @default(cuid())
+  clinic_name String
+  address_id  String?
+  address     Address? @relation(fields: [address_id], references: [id])
+
+  // New: Link a clinic to a user (e.g., owner/primary account)
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  phone_number                   String?
+  email                          String?
+  website                        String?
+  license_no                     String?
+  clinicLogo                     Json?
+  companyRegistrationCertificate Json?
+  proofOfBusinessAddress         Json?
+  registrationCertificate        Json?
+  otherDocuments                 Json?
+  Logo                           Json?
+  signature                      Json?
+  opening_time                   String?
+  closing_time                   String?
+  is_active                      Boolean       @default(true)
+  createdAt                      DateTime      @default(now())
+  updatedAt                      DateTime      @updatedAt
+  doctors                        Doctor[]
+  appointments                   Appointment[]
+  services                       Service[]
+  chatrooms                      Chatroom[]
+  approvalRequests               ApprovalRequest[]
+
+  @@map("clinic")
+}
+
+model Address {
+  id             String   @id @default(cuid())
+  street_address String
+  city           String
+  state          String
+  postal_code    String
+  country        String
+  latitude       Float?
+  longitude      Float?
+  is_active      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  userId   String?
+  user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  patients Patient[]
+  clinics  Clinic[]
+
+  @@map("address")
+}
+
+model Service {
+  id               String        @id @default(cuid())
+  service_name     String
+  description      String?
+  price            Float
+  duration_minutes Int?
+  is_active        Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  clinic_id        String
+  clinic           Clinic        @relation(fields: [clinic_id], references: [id], onDelete: Cascade)
+  doctor_id        String?
+  doctor           Doctor?       @relation(fields: [doctor_id], references: [id])
+  appointments     Appointment[]
+  cart_items       Cart[]
+
+  @@map("service")
+}
+
+model Appointment {
+  id                  String            @id @default(cuid())
+  appointment_date    DateTime
+  appointment_time    String
+  status              String            @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELLED, RESCHEDULED
+  notes               String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  patient_id          String
+  patient             Patient           @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+  doctor_id           String
+  doctor              Doctor            @relation(fields: [doctor_id], references: [id], onDelete: Cascade)
+  clinic_id           String
+  clinic              Clinic            @relation(fields: [clinic_id], references: [id], onDelete: Cascade)
+  service_id          String
+  service             Service           @relation(fields: [service_id], references: [id], onDelete: Cascade)
+  appointment_slot_id String?
+  appointment_slot    Appointment_Slot? @relation(fields: [appointment_slot_id], references: [id])
+  notifications       Notification[]
+  medical_details     Medical_Details?
+  refund              Refund?
+
+  @@map("appointment")
+}
+
+model Appointment_Slot {
+  id           String        @id @default(cuid())
+  slot_date    DateTime
+  start_time   String
+  end_time     String
+  is_available Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  doctor_id    String
+  doctor       Doctor        @relation(fields: [doctor_id], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@map("appointment_slot")
+}
+
+model Notification {
+  id                String       @id @default(cuid())
+  notification_type String // APPOINTMENT, MESSAGE, SYSTEM, PRESCRIPTION, OTHER
+  title             String
+  message           String
+  is_read           Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  user_id           String
+  user              User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  appointment_id    String?
+  appointment       Appointment? @relation(fields: [appointment_id], references: [id], onDelete: SetNull)
+
+  @@map("notification")
+}
+
+model Condition {
+  id              String            @id @default(cuid())
+  condition_name  String
+  description     String?
+  severity        String? // MILD, MODERATE, SEVERE
+  diagnosis_date  DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  patient_id      String
+  patient         Patient           @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+  medical_details Medical_Details[]
+
+  @@map("condition")
+}
+
+model Medical_Details {
+  id                   String                @id @default(cuid())
+  diagnosis            String
+  treatment_plan       String?
+  notes                String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  patient_id           String
+  patient              Patient               @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+  doctor_id            String
+  doctor               Doctor                @relation(fields: [doctor_id], references: [id], onDelete: Cascade)
+  appointment_id       String                @unique
+  appointment          Appointment           @relation(fields: [appointment_id], references: [id], onDelete: Cascade)
+  condition_id         String?
+  condition            Condition?            @relation(fields: [condition_id], references: [id])
+  medical_details_area Medical_Details_Area?
+
+  @@map("medical_details")
+}
+
+model Medical_Details_Area {
+  id                 String          @id @default(cuid())
+  area_name          String
+  description        String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  medical_details_id String          @unique
+  medical_details    Medical_Details @relation(fields: [medical_details_id], references: [id], onDelete: Cascade)
+
+  @@map("medical_details_area")
+}
+
+model Prescription {
+  id                String           @id @default(cuid())
+  prescription_date DateTime
+  expiry_date       DateTime?
+  instructions      String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  patient_id        String
+  patient           Patient          @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+  doctor_id         String
+  doctor            Doctor           @relation(fields: [doctor_id], references: [id], onDelete: Cascade)
+  medicines         Medicine_Table[]
+
+  @@map("prescription")
+}
+
+model Medicine_Table {
+  id              String       @id @default(cuid())
+  medicine_name   String
+  dosage          String
+  frequency       String
+  duration_days   Int?
+  side_effects    String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  prescription_id String
+  prescription    Prescription @relation(fields: [prescription_id], references: [id], onDelete: Cascade)
+
+  @@map("medicine_table")
+}
+
+model Cart {
+  id         String   @id @default(cuid())
+  quantity   Int      @default(1)
+  added_at   DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  patient_id String
+  patient    Patient  @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+  service_id String
+  service    Service  @relation(fields: [service_id], references: [id], onDelete: Cascade)
+
+  @@unique([patient_id, service_id])
+  @@map("cart")
+}
+
+model Order {
+  id             String   @id @default(cuid())
+  order_date     DateTime @default(now())
+  total_amount   Float
+  status         String   @default("PENDING") // PENDING, CONFIRMED, PROCESSING, COMPLETED, CANCELLED
+  payment_status String   @default("UNPAID") // UNPAID, PAID, FAILED, REFUNDED
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  patient_id     String
+  patient        Patient  @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+  payment_id     String?
+  payment        Payment? @relation(fields: [payment_id], references: [id])
+  refund_id      String?
+  refund         Refund?  @relation(fields: [refund_id], references: [id])
+
+  @@map("order")
+}
+
+model Payment {
+  id             String   @id @default(cuid())
+  payment_date   DateTime @default(now())
+  amount         Float
+  payment_method String // CREDIT_CARD, DEBIT_CARD, UPI, NET_BANKING, WALLET
+  transaction_id String?  @unique
+  status         String   @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  orders         Order[]
+
+  @@map("payment")
+}
+
+model Refund {
+  id             String       @id @default(cuid())
+  refund_date    DateTime     @default(now())
+  refund_amount  Float
+  reason         String
+  status         String       @default("PENDING") // PENDING, APPROVED, REJECTED, COMPLETED
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  patient_id     String
+  patient        Patient      @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+  appointment_id String?      @unique
+  appointment    Appointment? @relation(fields: [appointment_id], references: [id], onDelete: SetNull)
+  orders         Order[]
+
+  @@map("refund")
+}
+
+model Booking {
+  id           String   @id @default(cuid())
+  booking_date DateTime @default(now())
+  status       String   @default("CONFIRMED") // CONFIRMED, CANCELLED, COMPLETED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  patient_id   String
+  patient      Patient  @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+
+  @@map("booking")
+}
+
+model Chatroom {
+  id          String    @id @default(cuid())
+  room_name   String
+  description String?
+  is_active   Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  clinic_id   String
+  clinic      Clinic    @relation(fields: [clinic_id], references: [id], onDelete: Cascade)
+  messages    Message[]
+
+  @@map("chatroom")
+}
+
+model Message {
+  id           String   @id @default(cuid())
+  message_text String
+  sent_at      DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  chatroom_id  String
+  chatroom     Chatroom @relation(fields: [chatroom_id], references: [id], onDelete: Cascade)
+  user_id      String
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("message")
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  rating      Int // 1-5 stars
+  review_text String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  patient_id  String
+  patient     Patient  @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+  doctor_id   String
+  doctor      Doctor   @relation(fields: [doctor_id], references: [id], onDelete: Cascade)
+
+  @@map("review")
+}
+
+model Agora {
+  id           String   @id @default(cuid())
+  channel_name String   @unique
+  app_id       String
+  token        String?
+  uid          Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("agora")
+}
+
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  password  String
+  id               String         @id @default(cuid())
+  name             String? // Make optional
+  email            String         @unique
+  password         String? // Make optional (for OAuth users)
+  emailVerified    Boolean        @default(false)
+  image            String?
+  role             String         @default("user") // System role (ADMIN, DOCTOR, PATIENT, CLINIC) - kept for backward compatibility
+  roleId           String?        // Dynamic role ID (for custom roles created by admin)
+  dynamicRole      Role?          @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  banned           Boolean        @default(false)
+  banReason        String?
+  banExpiresAt     DateTime?
+  dob              DateTime?
+  gender           String?
+  phone_no         String?
+  onboarding_stage String?
+  meta             Json?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  sessions         Session[]
+  accounts         Account[]
+  patient          Patient?
+  doctor           Doctor?
+  notifications    Notification[]
+  messages         Message[]
+  members          Member[]
+  addresses        Address[]
+
+  // New: Clinics linked to this user (owner/primary)
+  clinics         Clinic[]
+  ApprovalRequest ApprovalRequest[]
+
+  @@index([roleId])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  activeOrganizationId String?
+  @@unique([token])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@map("verification")
+}
+
+// Add these models to your schema.prisma
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String?  @unique
+  logo      String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members     Member[]
+  invitations Invitation[]
+
+  @@map("organization")
+}
+
+model Member {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  role           String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@map("member")
+}
+
+model Invitation {
+  id             String   @id @default(cuid())
+  organizationId String
+  email          String
+  role           String?
+  status         String
+  expiresAt      DateTime
+  inviterId      String
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, email])
+  @@map("invitation")
+}
+
+model ApprovalRequest {
+  id               String    @id @default(cuid())
+  request_type     String // "DOCTOR" or "CLINIC"
+  user_id          String
+  user             User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  entity_id        String // doctor_id or clinic_id
+  clinic_id        String? // For clinic-specific approval requests
+  clinic           Clinic?   @relation(fields: [clinic_id], references: [id], onDelete: Cascade)
+  status           String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  rejection_reason String?
+  reviewed_by      String? // admin user_id or clinic user_id
+  reviewed_at      DateTime?
+  renewal_date     DateTime? // Date when clinic should review again
+  request_data     Json? // Store the updated data for reference
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("approval_request")
+}
+
+// Dynamic Role and Permission Management Models
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g., "MANAGER", "FINANCIAL_MANAGER"
+  displayName String   // e.g., "Manager", "Financial Manager"
+  description String?
+  isSystem    Boolean  @default(false) // true for ADMIN, DOCTOR, PATIENT, CLINIC (cannot be deleted)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions RolePermission[]
+  users       User[]
+
+  @@index([name])
+  @@map("role")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  resource    String   // e.g., "user", "appointment", "invoice", "role", "permission"
+  action      String   // e.g., "create", "read", "update", "delete", "view", "list", "assign", "revoke"
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roles       RolePermission[]
+
+  @@unique([resource, action])
+  @@index([resource])
+  @@map("permission")
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime   @default(now())
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permission")
 }

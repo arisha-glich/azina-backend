@@ -1,0 +1,606 @@
+# Admin Profile Update API Documentation
+
+## Base URL
+```
+http://localhost:8080/api/v1/admin
+```
+
+## Overview
+This document describes the API endpoint for updating admin profile information, including name, email, and profile image. This endpoint allows authenticated admin users to update their own profile information.
+
+---
+
+## Authentication
+
+All endpoints require authentication with an admin role. Include the authentication token in the request headers:
+
+```
+Authorization: Bearer <token>
+```
+
+---
+
+## Endpoint
+
+### Update Admin Profile
+
+**Endpoint:** `PATCH /profile`
+
+**Description:** Updates the authenticated admin's profile information (name, email, profile image). All fields are optional, allowing partial updates. Only the authenticated admin can update their own profile.
+
+**Request Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Request Body Schema:**
+All fields are optional. Provide only the fields you want to update.
+
+```json
+{
+  "name": "string",           // Optional: Admin's full name (min 1 character if provided)
+  "email": "string",          // Optional: Valid email address (must be unique)
+  "image": "string | null"    // Optional: Valid image URL or null to remove image
+}
+```
+
+**Example Request:**
+```bash
+curl -X PATCH "http://localhost:8080/api/v1/admin/profile" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "image": "https://example.com/profile.jpg"
+  }'
+```
+
+**Example Response (200 OK):**
+```json
+{
+  "message": "Profile updated successfully",
+  "success": true,
+  "data": {
+    "id": "user123",
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "image": "https://example.com/profile.jpg",
+    "emailVerified": true,
+    "role": "ADMIN",
+    "roleId": null,
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-15T10:30:00.000Z"
+  }
+}
+```
+
+**Response Fields:**
+- `id` (string): User's unique identifier
+- `name` (string | null): Admin's full name
+- `email` (string): Admin's email address
+- `image` (string | null): Profile image URL
+- `emailVerified` (boolean): Whether the email has been verified
+- `role` (string): System role (should be "ADMIN" for admin users)
+- `roleId` (string | null): Dynamic role ID if assigned
+- `createdAt` (date): Timestamp when the account was created
+- `updatedAt` (date): Timestamp when the profile was last updated
+
+**Error Responses:**
+
+- `400 BAD REQUEST`: Invalid request data
+```json
+{
+  "message": "Bad request",
+  "success": false
+}
+```
+
+Common causes:
+- Invalid email format
+- Invalid image URL format
+- Name is empty string (if provided)
+
+- `401 UNAUTHORIZED`: Missing or invalid authentication token
+```json
+{
+  "message": "Unauthorized",
+  "success": false
+}
+```
+
+- `403 FORBIDDEN`: User does not have admin role
+```json
+{
+  "message": "Forbidden - Admin role required",
+  "success": false
+}
+```
+
+- `409 CONFLICT`: Email already exists
+```json
+{
+  "message": "Email already exists",
+  "success": false
+}
+```
+
+- `500 INTERNAL SERVER ERROR`: Server error
+```json
+{
+  "message": "Internal server error",
+  "success": false
+}
+```
+
+---
+
+## Frontend Implementation Examples
+
+### TypeScript/React Example
+
+```typescript
+// types/admin.ts
+export interface AdminProfile {
+  id: string
+  name: string | null
+  email: string
+  image: string | null
+  emailVerified: boolean
+  role: string
+  roleId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UpdateAdminProfileData {
+  name?: string
+  email?: string
+  image?: string | null
+}
+```
+
+```typescript
+// services/admin.service.ts
+import type { AdminProfile, UpdateAdminProfileData } from '@/types/admin'
+
+export async function updateAdminProfile(
+  data: UpdateAdminProfileData,
+  token: string
+): Promise<AdminProfile> {
+  const response = await fetch('http://localhost:8080/api/v1/admin/profile', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.message || 'Failed to update profile')
+  }
+
+  const result = await response.json()
+  return result.data
+}
+```
+
+### React Hook Example
+
+```typescript
+// hooks/useAdminProfile.ts
+import { useState } from 'react'
+import { updateAdminProfile } from '@/services/admin.service'
+import type { AdminProfile, UpdateAdminProfileData } from '@/types/admin'
+
+export function useAdminProfile(token: string) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const updateProfile = async (data: UpdateAdminProfileData) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const updatedProfile = await updateAdminProfile(data, token)
+      return updatedProfile
+    } catch (err: any) {
+      setError(err.message)
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return {
+    updateProfile,
+    loading,
+    error,
+  }
+}
+```
+
+### React Component Example
+
+```typescript
+// components/AdminProfileForm.tsx
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useAdminProfile } from '@/hooks/useAdminProfile'
+import type { AdminProfile, UpdateAdminProfileData } from '@/types/admin'
+
+interface AdminProfileFormProps {
+  initialProfile: AdminProfile
+  token: string
+  onUpdate?: (profile: AdminProfile) => void
+}
+
+export function AdminProfileForm({ initialProfile, token, onUpdate }: AdminProfileFormProps) {
+  const [formData, setFormData] = useState<UpdateAdminProfileData>({
+    name: initialProfile.name || '',
+    email: initialProfile.email,
+    image: initialProfile.image || '',
+  })
+  const [success, setSuccess] = useState(false)
+
+  const { updateProfile, loading, error } = useAdminProfile(token)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSuccess(false)
+
+    try {
+      // Only include fields that have changed
+      const updateData: UpdateAdminProfileData = {}
+
+      if (formData.name !== initialProfile.name) {
+        updateData.name = formData.name
+      }
+      if (formData.email !== initialProfile.email) {
+        updateData.email = formData.email
+      }
+      if (formData.image !== initialProfile.image) {
+        updateData.image = formData.image || null
+      }
+
+      // Only make request if there are changes
+      if (Object.keys(updateData).length > 0) {
+        const updatedProfile = await updateProfile(updateData)
+        setSuccess(true)
+        onUpdate?.(updatedProfile)
+      }
+    } catch (err) {
+      // Error handled by hook
+      console.error('Failed to update profile:', err)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label htmlFor="name">Name</label>
+        <input
+          id="name"
+          type="text"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          placeholder="Enter your name"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="email">Email</label>
+        <input
+          id="email"
+          type="email"
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          placeholder="Enter your email"
+          required
+        />
+      </div>
+
+      <div>
+        <label htmlFor="image">Profile Image URL</label>
+        <input
+          id="image"
+          type="url"
+          value={formData.image}
+          onChange={(e) => setFormData({ ...formData, image: e.target.value })}
+          placeholder="https://example.com/image.jpg"
+        />
+        <small>Leave empty to remove profile image</small>
+      </div>
+
+      {error && (
+        <div className="error-message" role="alert">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="success-message" role="alert">
+          Profile updated successfully!
+        </div>
+      )}
+
+      <button type="submit" disabled={loading}>
+        {loading ? 'Updating...' : 'Update Profile'}
+      </button>
+    </form>
+  )
+}
+```
+
+### Profile Image Upload Example
+
+If you need to handle file uploads, you'll need to upload the image first and then update the profile with the image URL:
+
+```typescript
+// services/upload.service.ts
+export async function uploadProfileImage(file: File, token: string): Promise<string> {
+  const formData = new FormData()
+  formData.append('image', file)
+
+  const response = await fetch('http://localhost:8080/api/v1/upload/profile-image', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to upload image')
+  }
+
+  const result = await response.json()
+  return result.data.url // Return the image URL
+}
+
+// Usage in component
+const handleImageUpload = async (file: File) => {
+  try {
+    const imageUrl = await uploadProfileImage(file, token)
+    await updateProfile({ image: imageUrl })
+  } catch (error) {
+    console.error('Failed to upload image:', error)
+  }
+}
+```
+
+### Using Better-Auth Client
+
+If you're using better-auth client SDK:
+
+```typescript
+import { authClient } from '@/lib/auth-client'
+
+async function updateAdminProfile(data: UpdateAdminProfileData) {
+  const session = await authClient.getSession()
+
+  if (!session) {
+    throw new Error('Not authenticated')
+  }
+
+  const response = await fetch('http://localhost:8080/api/v1/admin/profile', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.session.token}`,
+    },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.message || 'Failed to update profile')
+  }
+
+  return await response.json()
+}
+```
+
+---
+
+## Validation Rules
+
+### Name
+- Optional field
+- If provided, must be at least 1 character
+- Can be `null` to clear the name
+
+### Email
+- Optional field
+- If provided, must be a valid email format
+- Must be unique (not used by another user)
+- Cannot be updated to the same email (no-op)
+
+### Image
+- Optional field
+- If provided, must be a valid URL format
+- Can be `null` to remove the profile image
+- Accepts any valid URL (e.g., `https://example.com/image.jpg`)
+
+---
+
+## Business Logic
+
+### Partial Updates
+- Only fields provided in the request body will be updated
+- Fields not included in the request remain unchanged
+- An empty request body will result in no changes
+
+### Email Uniqueness
+- Before updating email, the system checks if the new email already exists
+- If the email is the same as the current email, the update is skipped (no error)
+- If the email exists for another user, a `409 CONFLICT` error is returned
+
+### Image Handling
+- Setting `image` to `null` removes the profile image
+- Setting `image` to an empty string (`""`) is treated as `null`
+- Providing an invalid URL format will result in a `400 BAD REQUEST` error
+
+---
+
+## Error Handling Best Practices
+
+```typescript
+async function updateProfileWithErrorHandling(data: UpdateAdminProfileData) {
+  try {
+    const updatedProfile = await updateAdminProfile(data, token)
+    return { success: true, data: updatedProfile }
+  } catch (error: any) {
+    if (error.message.includes('Email already exists')) {
+      return {
+        success: false,
+        error: 'This email is already in use. Please choose a different email.',
+      }
+    }
+
+    if (error.message.includes('Bad request')) {
+      return {
+        success: false,
+        error: 'Invalid data provided. Please check your input and try again.',
+      }
+    }
+
+    if (error.message.includes('Forbidden')) {
+      return {
+        success: false,
+        error: 'You do not have permission to update this profile.',
+      }
+    }
+
+    return {
+      success: false,
+      error: 'An unexpected error occurred. Please try again later.',
+    }
+  }
+}
+```
+
+---
+
+## Testing Examples
+
+### Update Name Only
+```typescript
+await updateAdminProfile({ name: 'Jane Doe' }, token)
+```
+
+### Update Email Only
+```typescript
+await updateAdminProfile({ email: 'jane.doe@example.com' }, token)
+```
+
+### Update Image Only
+```typescript
+await updateAdminProfile({ image: 'https://example.com/new-image.jpg' }, token)
+```
+
+### Remove Profile Image
+```typescript
+await updateAdminProfile({ image: null }, token)
+```
+
+### Update Multiple Fields
+```typescript
+await updateAdminProfile({
+  name: 'Jane Doe',
+  email: 'jane.doe@example.com',
+  image: 'https://example.com/profile.jpg',
+}, token)
+```
+
+---
+
+## Notes
+
+- The endpoint updates the profile of the authenticated admin user only
+- You cannot update another user's profile using this endpoint
+- Email changes do not automatically trigger email verification reset
+- Profile image URLs should be publicly accessible
+- The `updatedAt` timestamp is automatically updated by the database
+
+---
+
+## Related Endpoints
+
+- `GET /api/v1/admin/profile` - Get current admin profile (if implemented)
+- `GET /api/v1/user/permissions` - Get user permissions
+- `GET /api/v1/admin/roles` - List all available roles
+
+---
+
+## Security Considerations
+
+1. **Authentication**: Always include a valid admin token in the Authorization header
+2. **Validation**: Validate email and image URL formats on the frontend before sending
+3. **Error Handling**: Never expose sensitive error details to users
+4. **Rate Limiting**: Be aware of potential rate limits on profile updates
+5. **Image URLs**: Ensure image URLs are from trusted sources to prevent XSS attacks
+
+---
+
+## Example Complete Flow
+
+```typescript
+// Complete example with error handling and success feedback
+async function handleProfileUpdate(formData: UpdateAdminProfileData) {
+  try {
+    // Validate on frontend first
+    if (formData.email && !isValidEmail(formData.email)) {
+      throw new Error('Invalid email format')
+    }
+
+    if (formData.image && !isValidUrl(formData.image)) {
+      throw new Error('Invalid image URL')
+    }
+
+    // Update profile
+    const updatedProfile = await updateAdminProfile(formData, token)
+
+    // Update local state
+    setProfile(updatedProfile)
+
+    // Show success message
+    showNotification('Profile updated successfully', 'success')
+
+    return updatedProfile
+  } catch (error: any) {
+    // Handle specific errors
+    if (error.message.includes('Email already exists')) {
+      showNotification('This email is already in use', 'error')
+    } else {
+      showNotification('Failed to update profile', 'error')
+    }
+    throw error
+  }
+}
+```
+
+---
+
+## Summary
+
+**Endpoint:** `PATCH /api/v1/admin/profile`
+
+**Features:**
+- ✅ Update admin name
+- ✅ Update admin email (with uniqueness check)
+- ✅ Update profile image URL
+- ✅ Remove profile image (set to null)
+- ✅ Partial updates supported
+- ✅ Automatic timestamp updates
+
+**Best Practices:**
+- Validate data on the frontend before sending
+- Handle all error cases appropriately
+- Show user-friendly error messages
+- Update local state after successful updates
+- Provide loading states during updates
