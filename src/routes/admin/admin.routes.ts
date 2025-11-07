@@ -13,7 +13,10 @@ const ApprovalRequestSchema = z.object({
   rejection_reason: z.string().nullable(),
   reviewed_by: z.string().nullable(),
   reviewed_at: z.date().nullable(),
-  request_data: z.any().nullable(),
+  request_data: z.any().nullable().openapi({
+    description: 'Request data (JSON object)',
+    type: 'object',
+  }),
   createdAt: z.date(),
   updatedAt: z.date(),
   user: z.object({
@@ -23,7 +26,10 @@ const ApprovalRequestSchema = z.object({
     role: z.string(),
     onboarding_stage: z.string().nullable(),
   }),
-  entity: z.any().nullable(), // Full doctor/clinic object
+  entity: z.any().nullable().openapi({
+    description: 'Entity data (Doctor or Clinic object)',
+    type: 'object',
+  }), // Full doctor/clinic object
 })
 
 const ApprovalRequestUserSchema = z.object({
@@ -172,6 +178,13 @@ export const ADMIN_ROUTES = {
         }),
         'Request not found'
       ),
+      [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+        }),
+        'Internal server error'
+      ),
     },
   }),
 
@@ -210,6 +223,10 @@ export const ADMIN_ROUTES = {
       [HttpStatusCodes.NOT_FOUND]: jsonContent(
         z.object({ message: z.string(), success: z.boolean() }),
         'Request not found'
+      ),
+      [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Internal server error'
       ),
     },
   }),
@@ -543,9 +560,9 @@ export const ADMIN_ROUTES = {
             roleId: z.string().nullable(),
             dynamicRole: z
               .object({
-                id: z.string(),
-                name: z.string(),
-                displayName: z.string(),
+              id: z.string(),
+              name: z.string(),
+              displayName: z.string(),
               })
               .nullable(),
           }),

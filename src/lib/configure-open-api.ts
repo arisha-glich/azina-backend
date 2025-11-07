@@ -3,51 +3,50 @@ import { API_START_POINT } from '~/config/constants'
 import type { AppOpenAPI } from '~/types'
 
 export default function configureOpenAPI(app: AppOpenAPI) {
-  app.doc('/doc', {
-    openapi: '3.0.0',
-    info: {
-      version: '1',
-      title: 'API Docs',
-    },
-    servers: [
-      {
-        url: API_START_POINT,
-        description: 'API v1',
+  try {
+    app.doc('/doc', {
+      openapi: '3.0.0',
+      info: {
+        version: '1',
+        title: 'API Docs',
       },
-    ],
-  })
-
-  app.get(
-    '/reference',
-    Scalar({
-      // Theme and Layout - Enhanced for better UX
-      theme: 'kepler',
-      layout: 'modern',
-
-      // OpenAPI specification URL
-      url: '/doc',
-
-      // UI Customization for better developer experience
-      showSidebar: true,
-      hideModels: true,
-      hideDownloadButton: false,
-      hideTestRequestButton: false,
-
-      // Search functionality with hotkey
-      searchHotKey: 'k',
-      hiddenClients: true,
-      hideClientButton: true,
-
-      // HTTP Client Configuration - Use supported values
-      defaultHttpClient: {
-        targetKey: 'js',
-        clientKey: 'fetch',
-      },
-
-      // Authentication configuration
-      authentication: {
-        preferredSecurityScheme: 'bearerAuth',
-      },
+      servers: [
+        {
+          url: API_START_POINT,
+          description: 'API v1',
+        },
+      ],
     })
-  )
+  } catch (error) {
+    console.error('❌ [configureOpenAPI] Error setting up /doc endpoint:', error)
+    throw error
+  }
+
+  try {
+    app.get(
+      '/reference',
+      Scalar({
+        theme: 'kepler',
+        layout: 'modern',
+        url: '/doc',
+        showSidebar: true,
+        hideModels: true,
+        hideDownloadButton: false,
+        hideTestRequestButton: false,
+        searchHotKey: 'k',
+        hiddenClients: true,
+        hideClientButton: true,
+        defaultHttpClient: {
+          targetKey: 'js',
+          clientKey: 'fetch',
+        },
+        authentication: {
+          preferredSecurityScheme: 'bearerAuth',
+        },
+      })
+    )
+  } catch (error) {
+    console.error('❌ [configureOpenAPI] Error setting up /reference endpoint:', error)
+    throw error
+  }
 }

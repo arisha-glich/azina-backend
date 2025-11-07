@@ -26,12 +26,23 @@ function getStatusColor(status: number): string {
 export function customLogger(): MiddlewareHandler {
   return async (c, next) => {
     const { method, url } = c.req
-    await next()
-    const status = c.res.status
-    const statusColor = getStatusColor(status)
-    // eslint-disable-next-line no-console
-    console.log(
-      `${statusColor}${status}${colors.reset} ${colors.blue}${method}${colors.reset} ${url}`
-    )
+    const start = Date.now()
+    console.log(`➡️  ${colors.cyan}${method}${colors.reset} ${url}`)
+    try {
+      await next()
+      const status = c.res.status
+      const duration = Date.now() - start
+      const statusColor = getStatusColor(status)
+      console.log(
+        `⬅️  ${statusColor}${status}${colors.reset} ${colors.blue}${method}${colors.reset} ${url} (${duration}ms)`
+      )
+      if (status >= 400) {
+        console.error('❌ [logger] Error response detected:', { method, url, status })
+      }
+    } catch (error) {
+      const duration = Date.now() - start
+      console.error('❌ [logger] Request failed:', { method, url, duration, error })
+      throw error
+    }
   }
 }

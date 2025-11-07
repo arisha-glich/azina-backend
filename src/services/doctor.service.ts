@@ -1,5 +1,6 @@
 import prisma from '~/lib/prisma'
 import { approvalService } from './approval.service'
+import { emailHelpers } from '~/lib/email/service'
 
 export const doctorService = {
   async getDoctorByUserId(userId: string) {
@@ -90,21 +91,11 @@ export const doctorService = {
   },
 
   /**
-   * Update doctor profile by user ID
-   *
-   * Approval Routing Logic:
-   * - If onboarding_stage = 'doctor-clinic-detail' → Routes to clinic approval (uses clinic_id)
-   * - If onboarding_stage = 'doctor-detail' → Routes to admin approval
-   * - Otherwise → Routes to admin approval (default)
-   *
-   * This applies to all doctor update endpoints:
-   * - PATCH /api/v1/doctor/me
-   * - PATCH /api/v1/doctor/me/professional-info
-   * - PATCH /api/v1/doctor/me/professional-details
-   * - PATCH /api/v1/doctor/me/documents
+   * Update doctor profile by user ID without changing onboarding stage
+   * Simple update - no approval routing
    */
   // biome-ignore lint/suspicious/noExplicitAny: Doctor update data can have various shapes
-  async updateDoctorByUserId(userId: string, data: any) {
+  async updateDoctorByUserIdSimple(userId: string, data: any) {
     const existingDoctor = await prisma.doctor.findUnique({
       where: { user_id: userId },
       include: {
@@ -126,28 +117,279 @@ export const doctorService = {
       },
     })
 
-    // Use clinic_id from updated doctor (after update) to ensure we have the latest value
-    const clinicId = updatedDoctor.clinic_id
+    return updatedDoctor
+  },
+
+  /**
+   * Update doctor documents and always route the request to admin for approval.
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: Doctor update data can have various shapes
+  async submitDocumentsForAdminApproval(userId: string, data: any) {
+    const existingDoctor = await prisma.doctor.findUnique({
+      where: { user_id: userId },
+      include: {
+        user: true,
+        clinic: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    })
+
+    if (!existingDoctor) {
+      return null
+    }
+
+    const onboardingStageBefore = existingDoctor.user?.onboarding_stage
+    const hasClinic = Boolean(existingDoctor.clinic?.id)
+
+    const updatedDoctor = await prisma.doctor.update({
+      where: { id: existingDoctor.id },
+      data,
+      include: {
+        user: true,
+        clinic: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    })
+
+    const doctorName =
+      updatedDoctor.user?.name || updatedDoctor.user?.email || 'Doctor'
+    const doctorEmail = updatedDoctor.user?.email || 'Not provided'
+    const updatedAtIso = new Date().toISOString()
+
+    let onboardingStage: string
+
+    if (onboardingStageBefore === 'doctor-clinic-detail' && hasClinic) {
+      onboardingStage = 'CLINIC_APPROVAL_PENDING'
+      await approvalService.createClinicRequest(
+        userId,
+        updatedDoctor.id,
+        { section: 'documents', data },
+        updatedDoctor.clinic!.id
+      )
+
+      const clinicRecipient =
+        updatedDoctor.clinic?.user?.email || updatedDoctor.clinic?.email
+
+      if (clinicRecipient) {
+        await emailHelpers.notifyClinicDoctorDocumentsUpdated(clinicRecipient, {
+          doctorName,
+          doctorEmail,
+          clinicName: updatedDoctor.clinic?.clinic_name,
+          updatedAt: updatedAtIso,
+        })
+      }
+    } else {
+      onboardingStage = 'DOCTOR_APPROVAL_PENDING'
+      await approvalService.createRequest(userId, 'DOCTOR', updatedDoctor.id, {
+        section: 'documents',
+        data,
+      })
+
+      const adminUsers = await prisma.user.findMany({
+        where: {
+          role: {
+            equals: 'ADMIN',
+            mode: 'insensitive',
+          },
+        },
+        select: {
+          email: true,
+        },
+      })
+
+      const adminEmails = adminUsers
+        .map(user => user.email)
+        .filter((email): email is string => Boolean(email))
+
+      if (adminEmails.length) {
+        await emailHelpers.notifyAdminsDoctorDocumentsUpdated(adminEmails, {
+          doctorName,
+          doctorEmail,
+          updatedAt: updatedAtIso,
+        })
+      }
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        onboarding_stage: onboardingStage,
+      },
+      select: {
+        onboarding_stage: true,
+      },
+    })
+
+    return {
+      doctor: updatedDoctor,
+      onboarding_stage: updatedUser.onboarding_stage,
+    }
+  },
+
+  // biome-ignore lint/suspicious/noExplicitAny: Doctor update data can have various shapes
+  async notifyDocumentsUpdate(
+    userId: string,
+    data: any,
+    options?: { fallback?: 'admin' | 'self' }
+  ) {
+    const existingDoctor = await prisma.doctor.findUnique({
+      where: { user_id: userId },
+      include: {
+        user: true,
+        clinic: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    })
+
+    if (!existingDoctor) {
+      return null
+    }
+
+    const updatedDoctor = await prisma.doctor.update({
+      where: { id: existingDoctor.id },
+      data,
+      include: {
+        user: true,
+        clinic: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    })
+
+    const doctorName =
+      updatedDoctor.user?.name || updatedDoctor.user?.email || 'Doctor'
+    const doctorEmail = updatedDoctor.user?.email || 'Not provided'
+    const updatedAtIso = new Date().toISOString()
+
+    let notificationTarget: 'clinic' | 'admin' | 'self' | 'none' = 'none'
+
+    const fallback = options?.fallback ?? 'admin'
+
+    const notifyAdmins = async () => {
+      const adminUsers = await prisma.user.findMany({
+        where: {
+          role: {
+            equals: 'ADMIN',
+            mode: 'insensitive',
+          },
+        },
+        select: {
+          email: true,
+        },
+      })
+
+      const adminEmails = adminUsers
+        .map(user => user.email)
+        .filter((email): email is string => Boolean(email))
+
+      if (adminEmails.length) {
+        await emailHelpers.notifyAdminsDoctorDocumentsUpdated(adminEmails, {
+          doctorName,
+          doctorEmail,
+          updatedAt: updatedAtIso,
+        })
+        notificationTarget = 'admin'
+      }
+    }
+
+    if (updatedDoctor.clinic) {
+      const clinicRecipient =
+        updatedDoctor.clinic.user?.email || updatedDoctor.clinic.email
+
+      if (clinicRecipient) {
+        await emailHelpers.notifyClinicDoctorDocumentsUpdated(clinicRecipient, {
+          doctorName,
+          doctorEmail,
+          clinicName: updatedDoctor.clinic.clinic_name,
+          updatedAt: updatedAtIso,
+        })
+        notificationTarget = 'clinic'
+      }
+    }
+
+    if (notificationTarget === 'none') {
+      if (fallback === 'admin') {
+        await notifyAdmins()
+      } else if (fallback === 'self' && updatedDoctor.user?.email) {
+        await emailHelpers.notifyDoctorDocumentsUpdatedSelf(updatedDoctor.user.email, {
+          doctorName,
+          updatedAt: updatedAtIso,
+        })
+        notificationTarget = 'self'
+      }
+    }
+
+    return {
+      doctor: updatedDoctor,
+      notificationTarget,
+      updatedAt: updatedAtIso,
+    }
+  },
+
+  /**
+   * Update doctor profile by user ID
+   *
+   * Approval Routing Logic:
+   * - If onboarding_stage = 'doctor-clinic-detail' → Routes to clinic approval (uses clinic_id)
+   * - If onboarding_stage = 'doctor-detail' → Routes to admin approval
+   * - Otherwise → Routes to admin approval (default)
+   *
+   * This applies to all doctor update endpoints:
+   * - PATCH /api/v1/doctor/me
+   * - PATCH /api/v1/doctor/me/professional-info
+   * - PATCH /api/v1/doctor/me/professional-details
+   * - PATCH /api/v1/doctor/me/documents
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: Doctor update data can have various shapes
+  async updateDoctorByUserId(userId: string, data: any) {
+    const existingDoctor = await prisma.doctor.findUnique({
+      where: { user_id: userId },
+      include: {
+        user: true,
+        clinic: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    })
+
+    if (!existingDoctor) {
+      return null
+    }
+
+    const updatedDoctor = await prisma.doctor.update({
+      where: { id: existingDoctor.id },
+      data,
+      include: {
+        user: true,
+        clinic: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    })
+
+    const clinicId = updatedDoctor.clinic?.id
     let newOnboardingStage: string
 
-    console.log(
-      `[Doctor Update] Doctor ID: ${updatedDoctor.id}, Clinic ID: ${clinicId}, User ID: ${userId}`
-    )
-
-    // If doctor is linked to a clinic, send request to that clinic
     if (clinicId) {
       newOnboardingStage = 'CLINIC_APPROVAL_PENDING'
-      console.log(
-        `[Doctor Update] ✅ Routing doctor ${userId} approval request to clinic ${clinicId}`
-      )
-
       await approvalService.createClinicRequest(userId, updatedDoctor.id, data, clinicId)
     } else {
-      // No clinic linked, send to admin
       newOnboardingStage = 'DOCTOR_APPROVAL_PENDING'
-      console.log(
-        `[Doctor Update] ❌ Routing doctor ${userId} approval request to admin - NO CLINIC_ID FOUND!`
-      )
 
       await approvalService.createRequest(userId, 'DOCTOR', updatedDoctor.id, data)
     }

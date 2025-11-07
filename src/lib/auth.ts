@@ -33,12 +33,20 @@ export const auth = betterAuth({
       ac,
       roles: {
         admin,
+        ADMIN: admin,
         user,
+        USER: user,
         clinic,
+        CLINIC: clinic,
       },
-      authorized: async (user: { role?: string | null }) => {
-        // Check if user has ADMIN role
-        return isAdminRole(user.role)
+      authorized: async (user: { role?: string | null; roles?: (string | null)[]; primaryRole?: string | null }) => {
+        const potentialRoles = [user.role, user.primaryRole]
+
+        if (Array.isArray(user.roles)) {
+          potentialRoles.push(...user.roles)
+        }
+
+        return potentialRoles.some(role => isAdminRole(role ?? undefined))
       },
     }),
     organization({
@@ -51,15 +59,6 @@ export const auth = betterAuth({
 
       sendInvitationEmail: async data => {
         const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL}/accept-invitation?token=${data.id}`
-
-        console.log('Send invitation email:', {
-          to: data.email,
-          organizationId: data.organization.id,
-          inviterName: data.inviter.user.name,
-          role: data.role,
-          link: invitationLink,
-        })
-
         // TODO: Implement email service
       },
     }),

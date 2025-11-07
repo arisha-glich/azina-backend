@@ -8,10 +8,8 @@ import { registerEmailListeners } from '~/lib/email/service'
 import prisma from '~/lib/prisma'
 import { ORIGINS } from './config/origins'
 
-// Register email event listeners (includes React Email templates)
 registerEmailListeners()
 
-// parseENV()
 const app = createApp()
 
 app.use('*', async (c, next) => {
@@ -22,8 +20,6 @@ app.use('*', async (c, next) => {
     return next()
   }
 
-  // Fetch user from database to ensure role field is included
-  // This ensures case-insensitive admin role checking works correctly
   const userWithRole = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: {
@@ -32,7 +28,7 @@ app.use('*', async (c, next) => {
       email: true,
       emailVerified: true,
       image: true,
-      role: true, // Ensure role is included
+      role: true,
       roleId: true,
       banned: true,
       banReason: true,
@@ -48,7 +44,7 @@ app.use('*', async (c, next) => {
   return next()
 })
 app.use(
-  '*', // or replace with "*" to enable cors for all routes
+  '*',
   cors({
     origin: ORIGINS,
     allowHeaders: ['Content-Type', 'Authorization'],
@@ -62,10 +58,39 @@ app.on(['POST', 'GET', 'OPTIONS'], '/api/auth/*', async c => {
   const response = await auth.handler(c.req.raw)
   return handleAdminCreateUser(response, c)
 })
-registerRoutes(app)
-configureOpenAPI(app)
-console.log('Auth reference available at http://localhost:8080/api/auth/reference')
-console.log('API reference available at http://localhost:8080/reference')
+
+app.use('/doc', async (c, next) => {
+  try {
+    await next()
+    if (c.res.status >= 500) {
+      console.error('❌ [doc middleware] Response has 500 status after completion')
+      const clonedRes = c.res.clone()
+      try {
+        const text = await clonedRes.text()
+        console.error('❌ [doc middleware] Response body:', text)
+      } catch (e) {
+        console.error('❌ [doc middleware] Could not read response body:', e)
+      }
+    }
+  } catch (error) {
+    console.error('❌ [doc middleware] Error in /doc endpoint:', error)
+    throw error
+  }
+})
+
+try {
+  registerRoutes(app)
+} catch (error) {
+  console.error('❌ [index] Error registering routes:', error)
+  throw error
+}
+
+try {
+  configureOpenAPI(app)
+} catch (error) {
+  console.error('❌ [index] Error configuring OpenAPI:', error)
+  throw error
+}
 
 export default {
   fetch: app.fetch,

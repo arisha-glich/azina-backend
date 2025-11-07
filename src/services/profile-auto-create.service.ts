@@ -35,9 +35,6 @@ export const profileAutoCreateService = {
             },
           })
 
-          console.log(
-            `✅ Created Doctor profile for user ${userId}${options?.clinicId ? ` linked to clinic ${options.clinicId}` : ''}`
-          )
         }
       }
 
@@ -66,7 +63,6 @@ export const profileAutoCreateService = {
             },
           })
 
-          console.log(`✅ Created Clinic profile for user ${userId}`)
         }
       }
     } catch (error) {

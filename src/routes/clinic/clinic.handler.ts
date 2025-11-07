@@ -2,6 +2,7 @@ import { hashPassword } from 'better-auth/crypto'
 import * as HttpStatusCodes from 'stoker/http-status-codes'
 import { isClinicRole } from '~/lib/auth-permissions'
 import { emailHelpers } from '~/lib/email/service'
+import { convertImagesToSignedUrls } from '~/lib/image-url-converter'
 import prisma from '~/lib/prisma'
 import type { CLINIC_ROUTES } from '~/routes/clinic/clinic.routes'
 import { approvalService } from '~/services/approval.service'
@@ -29,11 +30,14 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
         )
       }
 
+      // Convert image URLs to signed URLs
+      const processedClinic = await convertImagesToSignedUrls(clinic)
+
       return c.json(
         {
           message: 'Clinic retrieved successfully',
           success: true,
-          data: clinic,
+          data: processedClinic,
         },
         HttpStatusCodes.OK
       )
@@ -85,6 +89,130 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
     }
   },
 
+  update_my_clinic_documents: async c => {
+    try {
+      const userId = c.get('user')?.id
+      const updateData = c.req.valid('json')
+
+      if (!userId) {
+        return c.json({ message: 'Unauthorized', success: false }, HttpStatusCodes.UNAUTHORIZED)
+      }
+
+      const result = await clinicService.notifyClinicDocumentsUpdate(userId, updateData)
+      if (!result) {
+        return c.json(
+          { message: 'Clinic not found. Please ensure your user role is set to CLINIC.', success: false },
+          HttpStatusCodes.NOT_FOUND
+        )
+      }
+
+      const processedClinic = await convertImagesToSignedUrls(result.clinic)
+
+      return c.json(
+        {
+          message: 'Clinic documents updated and admin notified',
+          success: true,
+          data: {
+            clinic: processedClinic,
+            notificationTarget: result.notificationTarget,
+            notifiedAt: result.updatedAt,
+          },
+        },
+        HttpStatusCodes.OK
+      )
+    } catch (error) {
+      console.error('Error updating clinic documents:', error)
+      return c.json(
+        { message: 'Internal server error', success: false },
+        HttpStatusCodes.INTERNAL_SERVER_ERROR
+      )
+    }
+  },
+
+  get_my_clinic_documents: async c => {
+    try {
+      const userId = c.get('user')?.id
+
+      if (!userId) {
+        return c.json({ message: 'Unauthorized', success: false }, HttpStatusCodes.UNAUTHORIZED)
+      }
+
+      const clinic = await clinicService.getClinicByUserId(userId)
+
+      if (!clinic) {
+        return c.json(
+          { message: 'Clinic not found. Please ensure your user role is set to CLINIC.', success: false },
+          HttpStatusCodes.NOT_FOUND
+        )
+      }
+
+      const documents = {
+        clinicLogo: clinic.clinicLogo,
+        companyRegistrationCertificate: clinic.companyRegistrationCertificate,
+        proofOfBusinessAddress: clinic.proofOfBusinessAddress,
+        registrationCertificate: clinic.registrationCertificate,
+        otherDocuments: clinic.otherDocuments,
+        signature: clinic.signature,
+        Logo: clinic.Logo,
+      }
+
+      const processedDocuments = await convertImagesToSignedUrls(documents)
+
+      return c.json(
+        {
+          message: 'Clinic documents retrieved successfully',
+          success: true,
+          data: processedDocuments,
+        },
+        HttpStatusCodes.OK
+      )
+    } catch (error) {
+      console.error('Error retrieving clinic documents:', error)
+      return c.json(
+        { message: 'Internal server error', success: false },
+        HttpStatusCodes.INTERNAL_SERVER_ERROR
+      )
+    }
+  },
+
+  create_my_clinic: async c => {
+    try {
+      const userId = c.get('user')?.id
+      const updateData = c.req.valid('json')
+
+      if (!userId) {
+        return c.json({ message: 'Unauthorized', success: false }, HttpStatusCodes.UNAUTHORIZED)
+      }
+
+      const clinic = await clinicService.updateClinicByUserIdSimple(userId, updateData)
+
+      if (!clinic) {
+        return c.json(
+          {
+            message: 'Clinic not found. Please ensure your user role is set to CLINIC.',
+            success: false,
+          },
+          HttpStatusCodes.NOT_FOUND
+        )
+      }
+
+      return c.json(
+        {
+          message: 'Clinic updated successfully',
+          success: true,
+          data: clinic,
+        },
+        HttpStatusCodes.OK
+      )
+    } catch (error) {
+      console.error('Error updating clinic:', error)
+      return c.json(
+        { message: 'Internal server error', success: false },
+        HttpStatusCodes.INTERNAL_SERVER_ERROR
+      )
+    }
+  },
+
   get_my_requests: async c => {
     try {
       const userId = c.get('user')?.id
@@ -93,9 +221,18 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
       }
       const status =
         (c.req.query('status') as 'PENDING' | 'APPROVED' | 'REJECTED' | undefined) || undefined
-      const items = await approvalService.getUserRequests(userId, status)
+
+      const clinic = await clinicService.getClinicByUserId(userId)
+      if (!clinic) {
+        return c.json({ message: 'Clinic not found', success: false }, HttpStatusCodes.NOT_FOUND)
+      }
+
+      const requests = await approvalService.getClinicRequests(clinic.id, status)
+
+      const processedItems = await convertImagesToSignedUrls(requests)
+
       return c.json(
-        { message: 'Requests retrieved successfully', success: true, data: items },
+        { message: 'Requests retrieved successfully', success: true, data: processedItems },
         HttpStatusCodes.OK
       )
     } catch (error) {
@@ -115,9 +252,19 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
       }
       const status =
         (c.req.query('status') as 'PENDING' | 'APPROVED' | 'REJECTED' | undefined) || undefined
-      const item = await approvalService.getLatestUserRequest(userId, status)
+
+      const clinic = await clinicService.getClinicByUserId(userId)
+      if (!clinic) {
+        return c.json({ message: 'Clinic not found', success: false }, HttpStatusCodes.NOT_FOUND)
+      }
+
+      const requests = await approvalService.getClinicRequests(clinic.id, status)
+      const latest = requests[0] ?? null
+
+      const processedItem = latest ? await convertImagesToSignedUrls(latest) : null
+
       return c.json(
-        { message: 'Latest request retrieved successfully', success: true, data: item ?? null },
+        { message: 'Latest request retrieved successfully', success: true, data: processedItem },
         HttpStatusCodes.OK
       )
     } catch (error) {
@@ -137,20 +284,26 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
         return c.json({ message: 'Unauthorized', success: false }, HttpStatusCodes.UNAUTHORIZED)
       }
 
-      const request = await approvalService.getRequestByUserId(userId)
+      const clinic = await clinicService.getClinicByUserId(userId)
+      if (!clinic) {
+        return c.json({ message: 'Clinic not found', success: false }, HttpStatusCodes.NOT_FOUND)
+      }
+
+      const requests = await approvalService.getClinicRequests(clinic.id)
+      const latest = requests[0] ?? null
 
       return c.json(
         {
           message: 'Request status retrieved successfully',
           success: true,
-          data: request
+          data: latest
             ? {
-                id: request.id,
-                request_type: request.request_type,
-                status: request.status,
-                rejection_reason: request.rejection_reason,
-                reviewed_at: request.reviewed_at,
-                createdAt: request.createdAt,
+                id: latest.id,
+                request_type: latest.request_type,
+                status: latest.status,
+                rejection_reason: latest.rejection_reason,
+                reviewed_at: latest.reviewed_at,
+                createdAt: latest.createdAt,
               }
             : null,
         },
@@ -168,104 +321,26 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
   get_clinic_doctors: async c => {
     try {
       const userId = c.get('user')?.id
-      const query = c.req.valid('query')
-      const clinic_id = query?.clinic_id
 
-      console.log('get_clinic_doctors called:', {
-        userId,
-        clinic_id,
-        hasClinicId: !!clinic_id,
-      })
-
-      let clinic: Awaited<
-        ReturnType<typeof prisma.clinic.findUnique<{ include: { user: true; address: true } }>>
-      > | null = null
-
-      // If clinic_id is provided and not empty, use that clinic directly
-      if (clinic_id && clinic_id.trim() !== '') {
-        clinic = await prisma.clinic.findUnique({
-          where: { id: clinic_id },
-          include: { user: true, address: true },
-        })
-
-        if (!clinic) {
-          return c.json({ message: 'Clinic not found', success: false }, HttpStatusCodes.NOT_FOUND)
-        }
-      } else {
-        // Otherwise, use the logged-in clinic user's clinic
-        if (!userId) {
-          return c.json({ message: 'Unauthorized', success: false }, HttpStatusCodes.UNAUTHORIZED)
-        }
-
-        // Verify user is a clinic user if no clinic_id provided
-        const user = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { role: true },
-        })
-
-        if (!isClinicRole(user?.role)) {
-          return c.json(
-            {
-              message: 'Only clinic users can access this endpoint without clinic_id',
-              success: false,
-            },
-            HttpStatusCodes.FORBIDDEN
-          )
-        }
-
-        // Get the clinic for this user
-        clinic = await clinicService.getClinicByUserId(userId)
-
-        if (!clinic) {
-          // Try to auto-create clinic if user is CLINIC role
-          const userData = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { name: true, email: true, role: true },
-          })
-
-          if (userData && isClinicRole(userData.role)) {
-            try {
-              // Auto-create clinic if user is CLINIC role
-              clinic = await prisma.clinic.create({
-                data: {
-                  clinic_name: userData.name || userData.email || `Clinic-${userId.slice(0, 8)}`,
-                  user_id: userId,
-                  is_active: true,
-                },
-                include: { user: true, address: true },
-              })
-              console.log('✅ Auto-created clinic:', clinic.id)
-              // biome-ignore lint/suspicious/noExplicitAny: Prisma error types are dynamic
-            } catch (createError: any) {
-              console.error('❌ Error auto-creating clinic:', createError)
-              return c.json(
-                {
-                  message: `Failed to create clinic profile: ${createError.message || 'Unknown error'}`,
-                  success: false,
-                },
-                HttpStatusCodes.INTERNAL_SERVER_ERROR
-              )
-            }
-          } else {
-            return c.json(
-              {
-                message: `Clinic not found. User role is: ${userData?.role || 'unknown'}. Please provide clinic_id or ensure your user role is set to CLINIC.`,
-                success: false,
-              },
-              HttpStatusCodes.NOT_FOUND
-            )
-          }
-        }
+      if (!userId) {
+        return c.json({ message: 'Unauthorized', success: false }, HttpStatusCodes.UNAUTHORIZED)
       }
 
-      // Get all approved doctors for this clinic
+      const clinic = await clinicService.getClinicByUserId(userId)
+
+      if (!clinic) {
+        return c.json({ message: 'Clinic not found', success: false }, HttpStatusCodes.NOT_FOUND)
+      }
+
       const doctors = await clinicService.getApprovedClinicDoctors(clinic.id)
+
+      const processedDoctors = await convertImagesToSignedUrls(doctors)
 
       return c.json(
         {
           message: 'Clinic doctors retrieved successfully',
           success: true,
-          data: doctors,
+          data: processedDoctors,
         },
         HttpStatusCodes.OK
       )
@@ -350,11 +425,14 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
         )
       }
 
+      // Convert image URLs to signed URLs
+      const processedDoctor = await convertImagesToSignedUrls(doctor)
+
       return c.json(
         {
           message: 'Clinic doctor retrieved successfully',
           success: true,
-          data: doctor,
+          data: processedDoctor,
         },
         HttpStatusCodes.OK
       )
@@ -371,11 +449,14 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
     try {
       const clinics = await clinicService.getApprovedClinics()
 
+      // Convert image URLs to signed URLs
+      const processedClinics = await convertImagesToSignedUrls(clinics)
+
       return c.json(
         {
           message: 'Approved clinics retrieved successfully',
           success: true,
-          data: clinics,
+          data: processedClinics,
         },
         HttpStatusCodes.OK
       )
@@ -397,11 +478,14 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
         return c.json({ message: 'Clinic not found', success: false }, HttpStatusCodes.NOT_FOUND)
       }
 
+      // Convert image URLs to signed URLs
+      const processedClinic = await convertImagesToSignedUrls(clinic)
+
       return c.json(
         {
           message: 'Clinic retrieved successfully',
           success: true,
-          data: clinic,
+          data: processedClinic,
         },
         HttpStatusCodes.OK
       )
@@ -458,7 +542,6 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
           },
         })
 
-        console.log(`✅ Created Clinic profile for user ${session.id}`)
       }
 
       // Get request data
@@ -537,7 +620,7 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
       }
 
       // Step 5: Create Doctor profile linked to the clinic
-      let newDoctor: Awaited<ReturnType<typeof prisma.doctor.create>> | null = null
+      let newDoctor = null
       try {
         newDoctor = await prisma.doctor.create({
           data: {
@@ -545,7 +628,7 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
             specialization: data.specialization,
             license_number: data.license_number,
             availability_status: 'AVAILABLE',
-            clinic_id: clinic.id, // ✅ Link to the logged-in clinic
+            clinic_id: clinic.id,
             phone_no: data.phone_no || null,
           },
           include: {
@@ -589,7 +672,13 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
           profileUpdateLink,
         })
 
-        console.log(`✅ Profile setup invitation email sent to ${newUser.email}`)
+        await emailHelpers.sendDoctorCredentialsEmail(newUser.email, {
+          doctorName: fullName,
+          clinicName: clinic.clinic_name,
+          email: newUser.email,
+          password: data.password,
+          loginLink,
+        })
       } catch (emailError) {
         // Log error but don't fail the request
         console.error('❌ Error sending profile setup invitation email:', emailError)
@@ -600,7 +689,7 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
           message: 'Doctor created and linked to clinic successfully',
           success: true,
           data: {
-            user: newDoctor.user,
+            user: newDoctor?.user,
             doctor: newDoctor,
           },
         },
@@ -626,10 +715,8 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
   },
 
   get_clinic_requests: async c => {
-    console.log('🔵 [get_clinic_requests] ENDPOINT CALLED - Starting request processing')
     try {
       const userId = c.get('user')?.id
-      console.log('🔵 [get_clinic_requests] User ID:', userId)
 
       // Get raw query params and clean up malformed status values
       const rawStatus = c.req.query('status')
@@ -653,12 +740,6 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
         select: { role: true },
       })
 
-      console.log('[get_clinic_requests] User role check:', {
-        userId,
-        role: user?.role,
-        isClinic: isClinicRole(user?.role),
-      })
-
       if (!isClinicRole(user?.role)) {
         return c.json(
           {
@@ -671,12 +752,6 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
 
       // Get clinic for this user
       const clinic = await clinicService.getClinicByUserId(userId)
-
-      console.log('[get_clinic_requests] Clinic lookup:', {
-        userId,
-        clinicId: clinic?.id,
-        clinicName: clinic?.clinic_name,
-      })
 
       if (!clinic) {
         // Try to auto-create clinic if user is CLINIC role
@@ -738,40 +813,16 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
         }
       }
 
-      console.log('[get_clinic_requests] Calling getClinicRequests with:', {
-        clinicId: clinic.id,
-        status,
-      })
-
-      // DEBUG: Check all requests with clinic_id in database
-      const allClinicRequests = await prisma.approvalRequest.findMany({
-        where: { clinic_id: { not: null } },
-        select: {
-          id: true,
-          request_type: true,
-          clinic_id: true,
-          status: true,
-          user_id: true,
-        },
-      })
-      console.log(
-        '[get_clinic_requests] DEBUG - All requests with clinic_id in DB:',
-        allClinicRequests
-      )
-      console.log(
-        '[get_clinic_requests] DEBUG - Requests matching clinic.id:',
-        allClinicRequests.filter(r => r.clinic_id === clinic.id)
-      )
-
       const requests = await approvalService.getClinicRequests(clinic.id, status)
 
-      console.log('[get_clinic_requests] Final result count:', requests.length)
+      // Convert image URLs to signed URLs
+      const processedRequests = await convertImagesToSignedUrls(requests)
 
       return c.json(
         {
           message: 'Requests retrieved successfully',
           success: true,
-          data: requests,
+          data: processedRequests,
         },
         HttpStatusCodes.OK
       )
@@ -798,12 +849,6 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { role: true },
-      })
-
-      console.log('[get_clinic_request_by_id] User role check:', {
-        userId,
-        role: user?.role,
-        isClinic: isClinicRole(user?.role),
       })
 
       if (!isClinicRole(user?.role)) {
@@ -841,11 +886,14 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
         )
       }
 
+      // Convert image URLs to signed URLs
+      const processedRequest = await convertImagesToSignedUrls(request)
+
       return c.json(
         {
           message: 'Request details retrieved successfully',
           success: true,
-          data: request,
+          data: processedRequest,
         },
         HttpStatusCodes.OK
       )

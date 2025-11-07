@@ -77,6 +77,65 @@ const ClinicUpdateSchema = z.object({
   }),
 })
 
+const ClinicDocumentsSchema = z.object({
+  clinicLogo: z.any().optional().openapi({
+    description: 'Clinic logo asset (URL/key/JSON)',
+    type: 'object',
+  }),
+  companyRegistrationCertificate: z.any().optional().openapi({
+    description: 'Company registration certificate documents',
+    type: 'object',
+  }),
+  proofOfBusinessAddress: z.any().optional().openapi({
+    description: 'Proof of business address documents',
+    type: 'object',
+  }),
+  registrationCertificate: z.any().optional().openapi({
+    description: 'Registration certificates',
+    type: 'object',
+  }),
+  otherDocuments: z.any().optional().openapi({
+    description: 'Other supporting documents (array, URL or JSON)',
+    type: 'object',
+  }),
+  signature: z.any().optional().openapi({
+    description: 'Authorised signature asset',
+    type: 'object',
+  }),
+  Logo: z.any().optional().openapi({
+    description: 'Legacy logo asset',
+    type: 'object',
+  }),
+})
+
+const ClinicDocumentsNotificationResponseSchema = z.object({
+  message: z.string(),
+  success: z.boolean(),
+  data: z.object({
+    clinic: ClinicSchema,
+    notificationTarget: z
+      .enum(['admin', 'none'])
+      .openapi({ description: 'Who was notified about the document update' }),
+    notifiedAt: z
+      .string()
+      .openapi({ description: 'ISO timestamp when the notification was sent' }),
+  }),
+})
+
+const ClinicDocumentsResponseSchema = z.object({
+  message: z.string(),
+  success: z.boolean(),
+  data: z.object({
+    clinicLogo: z.any().nullable(),
+    companyRegistrationCertificate: z.any().nullable(),
+    proofOfBusinessAddress: z.any().nullable(),
+    registrationCertificate: z.any().nullable(),
+    otherDocuments: z.any().nullable(),
+    signature: z.any().nullable(),
+    Logo: z.any().nullable(),
+  }),
+})
+
 const RequestItemSchema = z.object({
   id: z.string(),
   request_type: z.string(),
@@ -84,8 +143,14 @@ const RequestItemSchema = z.object({
   rejection_reason: z.string().nullable(),
   reviewed_at: z.date().nullable(),
   createdAt: z.date(),
-  request_data: z.any().nullable(),
-  entity: z.any().nullable(),
+  request_data: z.any().nullable().openapi({
+    description: 'Request data (JSON object)',
+    type: 'object',
+  }),
+  entity: z.any().nullable().openapi({
+    description: 'Entity data (Doctor or Clinic object)',
+    type: 'object',
+  }),
   user: z.object({ id: z.string(), email: z.string(), name: z.string().nullable().optional() }),
 })
 
@@ -132,6 +197,101 @@ export const CLINIC_ROUTES = {
     path: '/me',
     summary: "Update current user's clinic",
     description: 'Update the clinic associated with the current authenticated user',
+    request: {
+      body: jsonContentRequired(ClinicUpdateSchema, 'Clinic update payload'),
+    },
+    responses: {
+      [HttpStatusCodes.OK]: jsonContent(
+        zodResponseSchema(ClinicSchema),
+        'Clinic updated successfully'
+      ),
+      [HttpStatusCodes.NOT_FOUND]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+        }),
+        'Clinic not found'
+      ),
+      [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+        }),
+        'Unauthorized'
+      ),
+      [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+        }),
+        'Internal server error'
+      ),
+    },
+  }),
+
+  update_my_clinic_documents: createRoute({
+    method: 'patch',
+    tags: [API_TAGS.CLINIC],
+    path: '/me/documents',
+    summary: 'Update clinic documents',
+    description:
+      'Update clinic compliance documents (logo, certificates, etc.) and notify administrators',
+    request: {
+      body: jsonContentRequired(ClinicDocumentsSchema, 'Clinic document payload'),
+    },
+    responses: {
+      [HttpStatusCodes.OK]: jsonContent(
+        ClinicDocumentsNotificationResponseSchema,
+        'Clinic documents updated successfully'
+      ),
+      [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Unauthorized'
+      ),
+      [HttpStatusCodes.NOT_FOUND]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Clinic not found'
+      ),
+      [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Internal server error'
+      ),
+    },
+  }),
+
+  get_my_clinic_documents: createRoute({
+    method: 'get',
+    tags: [API_TAGS.CLINIC],
+    path: '/me/documents',
+    summary: 'Get clinic documents',
+    description: 'Retrieve clinic compliance documents (logo, certificates, etc.)',
+    request: {},
+    responses: {
+      [HttpStatusCodes.OK]: jsonContent(
+        ClinicDocumentsResponseSchema,
+        'Clinic documents retrieved successfully'
+      ),
+      [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Unauthorized'
+      ),
+      [HttpStatusCodes.NOT_FOUND]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Clinic not found'
+      ),
+      [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Internal server error'
+      ),
+    },
+  }),
+
+  create_my_clinic: createRoute({
+    method: 'post',
+    tags: [API_TAGS.CLINIC],
+    path: '/me',
+    summary: 'Create/Update clinic profile',
+    description: 'Create or update clinic profile without changing onboarding stage (no approval routing)',
     request: {
       body: jsonContentRequired(ClinicUpdateSchema, 'Clinic update payload'),
     },
@@ -336,7 +496,10 @@ export const CLINIC_ROUTES = {
               banned: z.boolean(),
               banReason: z.string().nullable(),
               banExpiresAt: z.date().nullable(),
-              meta: z.any().nullable(),
+              meta: z.any().nullable().openapi({
+                description: 'User metadata (JSON object)',
+                type: 'object',
+              }),
               createdAt: z.date(),
               updatedAt: z.date(),
             }),
@@ -388,18 +551,10 @@ export const CLINIC_ROUTES = {
     method: 'get',
     tags: [API_TAGS.CLINIC],
     path: '/doctors',
-    summary: 'Get all approved doctors for a clinic',
+    summary: 'Get approved doctors for logged-in clinic',
     description:
-      "Retrieve all doctors with onboarding_stage = 'APPROVED_BY_ADMIN' that belong to the specified clinic. If clinic_id is not provided, uses the logged-in clinic user's clinic.",
-    request: {
-      query: z.object({
-        clinic_id: z.string().optional().openapi({
-          description:
-            "Clinic ID to get doctors for. If not provided, uses the logged-in clinic user's clinic.",
-          example: 'clinic_123',
-        }),
-      }),
-    },
+      "Retrieve all doctors with onboarding_stage = 'APPROVED_BY_ADMIN' that belong to the clinic of the authenticated user.",
+    request: {},
     responses: {
       [HttpStatusCodes.OK]: jsonContent(
         zodResponseSchema(
@@ -477,7 +632,10 @@ export const CLINIC_ROUTES = {
               banned: z.boolean(),
               banReason: z.string().nullable(),
               banExpiresAt: z.date().nullable(),
-              meta: z.any().nullable(),
+              meta: z.any().nullable().openapi({
+                description: 'User metadata (JSON object)',
+                type: 'object',
+              }),
               createdAt: z.date(),
               updatedAt: z.date(),
             }),
@@ -608,8 +766,14 @@ export const CLINIC_ROUTES = {
               reviewed_at: z.date().nullable(),
               renewal_date: z.date().nullable(),
               createdAt: z.date(),
-              request_data: z.any().nullable(),
-              entity: z.any().nullable(), // Doctor with user and clinic
+              request_data: z.any().nullable().openapi({
+                description: 'Request data (JSON object)',
+                type: 'object',
+              }),
+              entity: z.any().nullable().openapi({
+                description: 'Entity data (Doctor or Clinic object)',
+                type: 'object',
+              }), // Doctor with user and clinic
               user: z.object({
                 id: z.string(),
                 name: z.string().nullable(),
@@ -671,8 +835,14 @@ export const CLINIC_ROUTES = {
             renewal_date: z.date().nullable(),
             createdAt: z.date(),
             updatedAt: z.date(),
-            request_data: z.any().nullable(),
-            entity: z.any().nullable(), // Full Doctor with user and clinic
+            request_data: z.any().nullable().openapi({
+              description: 'Request data (JSON object)',
+              type: 'object',
+            }),
+            entity: z.any().nullable().openapi({
+              description: 'Entity data (Doctor or Clinic object)',
+              type: 'object',
+            }), // Full Doctor with user and clinic
             user: z.object({
               id: z.string(),
               name: z.string().nullable(),
@@ -745,7 +915,10 @@ export const CLINIC_ROUTES = {
             reviewed_at: z.date(),
             reviewed_by: z.string(),
             renewal_date: z.date().nullable(),
-            entity: z.any().nullable(),
+            entity: z.any().nullable().openapi({
+              description: 'Entity data (Doctor or Clinic object)',
+              type: 'object',
+            }),
             user: z.object({
               id: z.string(),
               onboarding_stage: z.string(),
@@ -806,7 +979,10 @@ export const CLINIC_ROUTES = {
             rejection_reason: z.string(),
             reviewed_at: z.date(),
             reviewed_by: z.string(),
-            entity: z.any().nullable(),
+            entity: z.any().nullable().openapi({
+              description: 'Entity data (Doctor or Clinic object)',
+              type: 'object',
+            }),
             user: z.object({
               id: z.string(),
               onboarding_stage: z.string(),

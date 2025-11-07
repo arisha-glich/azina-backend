@@ -12,8 +12,6 @@ export function createRouter() {
       if (result.success) {
         return
       }
-      console.log(result)
-
       return c.json({ success: false, errors: result.error.issues }, { status: 400 })
     },
   })

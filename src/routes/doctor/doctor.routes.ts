@@ -103,15 +103,47 @@ const DoctorProfessionalDetailsSchema = z.object({
   availability_status: z.string().min(1),
   bio: z.string().min(10),
   consultation_fee: z.number().nonnegative(),
-  areas_of_expertise: z.any().optional(),
+  areas_of_expertise: z.any().optional().openapi({
+    description: 'Areas of expertise (array or JSON object)',
+    type: 'object',
+  }),
 })
 
 const DoctorDocumentsSchema = z.object({
-  resume: z.any().optional(),
-  idemnityInsaurance: z.any().optional(),
-  other_documents: z.any().optional(),
-  signature: z.any().optional(),
-  Logo: z.any().optional(),
+  resume: z.any().optional().openapi({
+    description: 'Resume documents (URLs array or JSON object)',
+    type: 'object',
+  }),
+  idemnityInsaurance: z.any().optional().openapi({
+    description: 'Indemnity insurance documents (URLs array or JSON object)',
+    type: 'object',
+  }),
+  other_documents: z.any().optional().openapi({
+    description: 'Other documents (URLs array or JSON object)',
+    type: 'object',
+  }),
+  signature: z.any().optional().openapi({
+    description: 'Digital signature (URL or JSON object)',
+    type: 'object',
+  }),
+  Logo: z.any().optional().openapi({
+    description: 'Logo (URL or JSON object)',
+    type: 'object',
+  }),
+})
+
+const DoctorDocumentsNotificationResponseSchema = z.object({
+  message: z.string(),
+  success: z.boolean(),
+  data: z.object({
+    doctor: DoctorSchema,
+    notificationTarget: z
+      .enum(['clinic', 'admin', 'self', 'none'])
+      .openapi({ description: 'Who received the notification email' }),
+    notifiedAt: z
+      .string()
+      .openapi({ description: 'ISO-8601 timestamp when the notification was sent' }),
+  }),
 })
 
 const RequestItemSchema = z.object({
@@ -121,8 +153,14 @@ const RequestItemSchema = z.object({
   rejection_reason: z.string().nullable(),
   reviewed_at: z.date().nullable(),
   createdAt: z.date(),
-  request_data: z.any().nullable(),
-  entity: z.any().nullable(),
+  request_data: z.any().nullable().openapi({
+    description: 'Request data (JSON object)',
+    type: 'object',
+  }),
+  entity: z.any().nullable().openapi({
+    description: 'Entity data (Doctor or Clinic object)',
+    type: 'object',
+  }),
   user: z.object({ id: z.string(), email: z.string(), name: z.string().nullable().optional() }),
 })
 
@@ -230,6 +268,78 @@ export const DOCTOR_ROUTES = {
     },
   }),
 
+  create_my_doctor_professional_info: createRoute({
+    method: 'post',
+    tags: [API_TAGS.DOCTOR],
+    path: '/me/professional-info',
+    summary: 'Create/Update professional info',
+    description: 'Create or update license number, regulatory body and professional email (no onboarding stage change)',
+    request: {
+      body: jsonContentRequired(DoctorProfessionalInfoSchema, 'Professional info payload'),
+    },
+    responses: {
+      [HttpStatusCodes.OK]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+          data: z.object({
+            license_number: z.string().nullable(),
+            regulatoryBody: z.string().nullable(),
+            professional_email: z.string().nullable(),
+          }),
+        }),
+        'Professional info updated'
+      ),
+      [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Unauthorized'
+      ),
+      [HttpStatusCodes.NOT_FOUND]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Doctor not found'
+      ),
+      [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Internal server error'
+      ),
+    },
+  }),
+
+  get_my_doctor_professional_info: createRoute({
+    method: 'get',
+    tags: [API_TAGS.DOCTOR],
+    path: '/me/professional-info',
+    summary: 'Get professional info',
+    description: 'Get license number, regulatory body and professional email',
+    request: {},
+    responses: {
+      [HttpStatusCodes.OK]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+          data: z.object({
+            license_number: z.string().nullable(),
+            regulatoryBody: z.string().nullable(),
+            professional_email: z.string().nullable(),
+          }),
+        }),
+        'Professional info retrieved successfully'
+      ),
+      [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Unauthorized'
+      ),
+      [HttpStatusCodes.NOT_FOUND]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Doctor not found'
+      ),
+      [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Internal server error'
+      ),
+    },
+  }),
+
   update_my_doctor_professional_details: createRoute({
     method: 'patch',
     tags: [API_TAGS.DOCTOR],
@@ -260,6 +370,94 @@ export const DOCTOR_ROUTES = {
     },
   }),
 
+  create_my_doctor_professional_details: createRoute({
+    method: 'post',
+    tags: [API_TAGS.DOCTOR],
+    path: '/me/professional-details',
+    summary: 'Create/Update professional details',
+    description:
+      'Create or update specialization, years of experience, designation, availability, bio, fee, expertise (no onboarding stage change)',
+    request: {
+      body: jsonContentRequired(DoctorProfessionalDetailsSchema, 'Professional details payload'),
+    },
+    responses: {
+      [HttpStatusCodes.OK]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+          data: z.object({
+            specialization: z.string().nullable(),
+            experience_years: z.number().nullable(),
+            professional: z.string().nullable(),
+            availability_status: z.string().nullable(),
+            bio: z.string().nullable(),
+            consultation_fee: z.number().nullable(),
+            areas_of_expertise: z.any().nullable().openapi({
+              description: 'Areas of expertise (array or JSON object)',
+              type: 'object',
+            }),
+          }),
+        }),
+        'Professional details updated'
+      ),
+      [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Unauthorized'
+      ),
+      [HttpStatusCodes.NOT_FOUND]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Doctor not found'
+      ),
+      [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Internal server error'
+      ),
+    },
+  }),
+
+  get_my_doctor_professional_details: createRoute({
+    method: 'get',
+    tags: [API_TAGS.DOCTOR],
+    path: '/me/professional-details',
+    summary: 'Get professional details',
+    description:
+      'Get specialization, years of experience, designation, availability, bio, fee, expertise',
+    request: {},
+    responses: {
+      [HttpStatusCodes.OK]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+          data: z.object({
+            specialization: z.string().nullable(),
+            experience_years: z.number().nullable(),
+            professional: z.string().nullable(),
+            availability_status: z.string().nullable(),
+            bio: z.string().nullable(),
+            consultation_fee: z.number().nullable(),
+            areas_of_expertise: z.any().nullable().openapi({
+              description: 'Areas of expertise (array or JSON object)',
+              type: 'object',
+            }),
+          }),
+        }),
+        'Professional details retrieved successfully'
+      ),
+      [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Unauthorized'
+      ),
+      [HttpStatusCodes.NOT_FOUND]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Doctor not found'
+      ),
+      [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Internal server error'
+      ),
+    },
+  }),
+
   update_my_doctor_documents: createRoute({
     method: 'patch',
     tags: [API_TAGS.DOCTOR],
@@ -268,7 +466,89 @@ export const DOCTOR_ROUTES = {
     description: 'Update resume, indemnity insurance, signature, logo and other documents',
     request: { body: jsonContentRequired(DoctorDocumentsSchema, 'Documents payload') },
     responses: {
-      [HttpStatusCodes.OK]: jsonContent(zodResponseSchema(DoctorSchema), 'Documents updated'),
+      [HttpStatusCodes.OK]: jsonContent(
+        DoctorDocumentsNotificationResponseSchema,
+        'Documents updated and notification email dispatched'
+      ),
+      [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Unauthorized'
+      ),
+      [HttpStatusCodes.NOT_FOUND]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Doctor not found'
+      ),
+      [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Internal server error'
+      ),
+    },
+  }),
+
+  create_my_doctor_documents: createRoute({
+    method: 'post',
+    tags: [API_TAGS.DOCTOR],
+    path: '/me/documents',
+    summary: 'Create/Update documents',
+    description: 'Create or update resume, indemnity insurance, signature, logo and other documents (no onboarding stage change)',
+    request: { body: jsonContentRequired(DoctorDocumentsSchema, 'Documents payload') },
+    responses: {
+      [HttpStatusCodes.OK]: jsonContent(
+        DoctorDocumentsNotificationResponseSchema,
+        'Documents updated and notification email dispatched'
+      ),
+      [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Unauthorized'
+      ),
+      [HttpStatusCodes.NOT_FOUND]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Doctor not found'
+      ),
+      [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+        z.object({ message: z.string(), success: z.boolean() }),
+        'Internal server error'
+      ),
+    },
+  }),
+
+  get_my_doctor_documents: createRoute({
+    method: 'get',
+    tags: [API_TAGS.DOCTOR],
+    path: '/me/documents',
+    summary: 'Get documents',
+    description: 'Get resume, indemnity insurance, signature, logo and other documents',
+    request: {},
+    responses: {
+      [HttpStatusCodes.OK]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+          data: z.object({
+            resume: z.any().nullable().openapi({
+              description: 'Resume documents (URLs array or JSON object)',
+              type: 'object',
+            }),
+            idemnityInsaurance: z.any().nullable().openapi({
+              description: 'Indemnity insurance documents (URLs array or JSON object)',
+              type: 'object',
+            }),
+            other_documents: z.any().nullable().openapi({
+              description: 'Other documents (URLs array or JSON object)',
+              type: 'object',
+            }),
+            signature: z.any().nullable().openapi({
+              description: 'Digital signature (URL or JSON object)',
+              type: 'object',
+            }),
+            Logo: z.any().nullable().openapi({
+              description: 'Logo (URL or JSON object)',
+              type: 'object',
+            }),
+          }),
+        }),
+        'Documents retrieved successfully'
+      ),
       [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
         z.object({ message: z.string(), success: z.boolean() }),
         'Unauthorized'
@@ -441,7 +721,10 @@ export const DOCTOR_ROUTES = {
               banned: z.boolean(),
               banReason: z.string().nullable(),
               banExpiresAt: z.date().nullable(),
-              meta: z.any().nullable(),
+              meta: z.any().nullable().openapi({
+                description: 'User metadata (JSON object)',
+                type: 'object',
+              }),
               createdAt: z.date(),
               updatedAt: z.date(),
             }),

@@ -2,15 +2,13 @@ import * as nodemailer from 'nodemailer'
 import type { MailEvent } from '~/lib/event-emitter'
 import { appEventEmitter } from '~/lib/event-emitter'
 
-// Get SMTP credentials
 const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER
 const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD
 
-// Initialize nodemailer transporter (only if credentials are provided)
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
   port: parseInt(process.env.SMTP_PORT || '587', 10),
-  secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+  secure: process.env.SMTP_SECURE === 'true',
   ...(smtpUser && smtpPass
     ? {
         auth: {
@@ -21,7 +19,6 @@ const transporter = nodemailer.createTransport({
     : {}),
 })
 
-// Email template renderer
 // biome-ignore lint/suspicious/noExplicitAny: Email template data can have various shapes
 async function renderEmailTemplate(template: string, data: Record<string, any>): Promise<string> {
   switch (template) {
@@ -48,7 +45,6 @@ async function renderEmailTemplate(template: string, data: Record<string, any>):
   }
 }
 
-// Send email using nodemailer
 async function sendEmail(eventData: MailEvent): Promise<void> {
   const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER
   const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD
@@ -62,14 +58,12 @@ async function sendEmail(eventData: MailEvent): Promise<void> {
     let html = eventData.html
     const text = eventData.text
 
-    // If template is provided, render it
     if (eventData.template && eventData.data) {
       html = await renderEmailTemplate(eventData.template, eventData.data)
     }
 
     const recipients = Array.isArray(eventData.to) ? eventData.to : [eventData.to]
 
-    // Prepare attachments for nodemailer
     const attachments = eventData.attachments?.map(att => ({
       filename: att.filename,
       content: typeof att.content === 'string' ? att.content : att.content,
@@ -90,7 +84,6 @@ async function sendEmail(eventData: MailEvent): Promise<void> {
       await transporter.sendMail(mailOptions)
     }
 
-    console.log(`✅ Email sent successfully to ${eventData.to}`)
   } catch (error) {
     console.error('❌ Error sending email:', error)
     appEventEmitter.emitMailError(error as Error, eventData)
@@ -98,7 +91,6 @@ async function sendEmail(eventData: MailEvent): Promise<void> {
   }
 }
 
-// Verify transporter connection on startup
 async function verifyEmailConnection() {
   const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER
   const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD
@@ -119,9 +111,7 @@ async function verifyEmailConnection() {
   }
 }
 
-// Register event listeners
 export function registerEmailListeners() {
-  // Generic mail sender
   appEventEmitter.onSendMail(async (eventData: MailEvent) => {
     try {
       await sendEmail(eventData)
@@ -130,23 +120,19 @@ export function registerEmailListeners() {
     }
   })
 
-  // Welcome email
   appEventEmitter.onWelcomeMail(async ({ to, userData }) => {
     try {
-      console.log('📬 Welcome email listener triggered for:', to)
       await sendEmail({
         to,
         subject: 'Welcome to Azina Healthcare',
         template: 'welcome',
         data: userData,
       })
-      console.log('✅ Welcome email sent successfully to:', to)
     } catch (error) {
       console.error('❌ Error sending welcome email:', error)
     }
   })
 
-  // Password reset email
   appEventEmitter.onPasswordResetMail(async ({ to, resetData }) => {
     try {
       await sendEmail({
@@ -160,19 +146,14 @@ export function registerEmailListeners() {
     }
   })
 
-  // Error handling
   appEventEmitter.onMailError(({ error, eventData }) => {
     console.error('Mail error occurred:', error)
     console.error('Failed email data:', eventData)
   })
 
-  console.log('✅ Email event listeners registered')
-
-  // Verify email connection
   verifyEmailConnection()
 }
 
-// Export email service functions for direct use if needed
 export const emailService = {
   send: sendEmail,
   renderTemplate: renderEmailTemplate,

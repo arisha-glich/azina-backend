@@ -250,12 +250,6 @@ export const approvalService = {
   // Returns ONLY DOCTOR requests where the doctor is associated with the clinic via clinic_id
   // This endpoint should NEVER return CLINIC type requests
   async getClinicRequests(clinicId: string, status?: 'PENDING' | 'APPROVED' | 'REJECTED') {
-    console.log('[getClinicRequests] Called with:', {
-      clinicId,
-      status,
-      clinicIdType: typeof clinicId,
-    })
-
     // DEBUG: Check what requests exist for this clinic_id
     const debugRequests = await prisma.approvalRequest.findMany({
       where: { clinic_id: clinicId },
@@ -267,29 +261,17 @@ export const approvalService = {
         user_id: true,
       },
     })
-    console.log(
-      '[getClinicRequests] DEBUG - All requests with clinic_id =',
-      clinicId,
-      ':',
-      debugRequests
-    )
-
     // Strictly filter: MUST be DOCTOR type AND have clinic_id matching
     // Explicitly exclude CLINIC requests
     // biome-ignore lint/suspicious/noExplicitAny: Prisma where clause can have dynamic structure
     const where: any = {
-      request_type: 'DOCTOR', // ONLY DOCTOR requests - never CLINIC
-      clinic_id: clinicId, // MUST have clinic_id matching
-      NOT: {
-        request_type: 'CLINIC', // Explicitly exclude CLINIC requests
-      },
+      request_type: { in: ['DOCTOR', 'CLINIC'] },
+      clinic_id: clinicId,
     }
 
     if (status) {
       where.status = status
     }
-
-    console.log('[getClinicRequests] Query params:', { clinicId, status, where })
 
     // Get ONLY DOCTOR requests with clinic_id matching
     const items = await prisma.approvalRequest.findMany({
@@ -310,97 +292,33 @@ export const approvalService = {
       orderBy: { createdAt: 'desc' },
     })
 
-    console.log('[getClinicRequests] Found requests:', items.length)
-    console.log(
-      '[getClinicRequests] Request details:',
-      items.map(i => ({
-        id: i.id,
-        request_type: i.request_type,
-        clinic_id: i.clinic_id,
-        status: i.status,
-        user_email: i.user.email,
-      }))
-    )
-
     // attachEntity will add the doctor entity with user and clinic info
     const results = await Promise.all(items.map(attachEntity))
 
-    // STRICT filtering: Ensure ONLY DOCTOR requests with valid doctor entity are returned
     const filtered = results.filter(req => {
       if (!req) {
         return false
       }
 
-      // MUST be DOCTOR type - reject CLINIC requests
       if (req.request_type !== 'DOCTOR') {
-        console.warn(
-          '[getClinicRequests] ❌ Rejecting non-DOCTOR request:',
-          req.id,
-          'type:',
-          req.request_type
-        )
         return false
       }
 
-      // MUST have clinic_id matching in approval_request
       if (req.clinic_id !== clinicId) {
-        console.warn(
-          '[getClinicRequests] ❌ Rejecting request with mismatched clinic_id:',
-          req.id,
-          'clinic_id:',
-          req.clinic_id,
-          'expected:',
-          clinicId
-        )
         return false
       }
 
-      // MUST have a doctor entity (not a clinic entity)
       if (!req.entity) {
-        console.warn('[getClinicRequests] ❌ Rejecting request without entity:', req.id)
         return false
       }
 
-      // Entity MUST be a doctor (check if it has doctor-specific fields, not clinic fields)
-      // Doctors have: specialization, license_number
-      // Clinics have: clinic_name (but clinics shouldn't be here anyway)
-      if (!req.entity.specialization && !req.entity.license_number) {
-        console.warn(
-          '[getClinicRequests] ❌ Rejecting request with non-doctor entity:',
-          req.id,
-          'entity type check failed'
-        )
-        return false
-      }
-
-      // Doctor MUST be linked to this clinic
       if (req.entity.clinic_id !== clinicId) {
-        console.warn(
-          '[getClinicRequests] ❌ Rejecting request where doctor.clinic_id mismatch:',
-          req.id,
-          'doctor.clinic_id:',
-          req.entity.clinic_id,
-          'expected:',
-          clinicId
-        )
         return false
       }
 
-      console.log(
-        '[getClinicRequests] ✅ Valid DOCTOR request:',
-        req.id,
-        'doctor_id:',
-        req.entity.id
-      )
       return true
     })
 
-    console.log(
-      '[getClinicRequests] Final filtered results:',
-      filtered.length,
-      'request_types:',
-      filtered.map(f => f.request_type)
-    )
     return filtered
   },
 

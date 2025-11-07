@@ -19,7 +19,7 @@ export function isAdminRole(role?: string | null): boolean {
   if (!role) {
     return false
   }
-  return role.toUpperCase() === 'ADMIN'
+  return role.trim().toUpperCase() === 'ADMIN'
 }
 
 /**
@@ -29,14 +29,14 @@ export function isClinicRole(role?: string | null): boolean {
   if (!role) {
     return false
   }
-  return role.toUpperCase() === 'CLINIC'
+  return role.trim().toUpperCase() === 'CLINIC'
 }
 
 /**
  * Check if a role is a system role
  */
 export function isSystemRole(role: string): boolean {
-  return SYSTEM_ROLES.includes(role.toUpperCase() as SystemRole)
+  return SYSTEM_ROLES.includes(role.trim().toUpperCase() as SystemRole)
 }
 
 /**

@@ -8,6 +8,7 @@ import {
   userHasPermission,
 } from '~/lib/auth-permissions'
 import { emailHelpers } from '~/lib/email/service'
+import { convertImagesToSignedUrls } from '~/lib/image-url-converter'
 import prisma from '~/lib/prisma'
 import type { ADMIN_ROUTES } from '~/routes/admin/admin.routes'
 import { approvalService } from '~/services/approval.service'
@@ -35,11 +36,14 @@ export const ADMIN_ROUTE_HANDLER: HandlerMapFromRoutes<typeof ADMIN_ROUTES> = {
         ? await approvalService.getAllRequests(status)
         : await approvalService.getAllPendingRequests()
 
+      // Convert image URLs to signed URLs
+      const processedRequests = await convertImagesToSignedUrls(requests)
+
       return c.json(
         {
           message: 'Requests retrieved successfully',
           success: true,
-          data: requests,
+          data: processedRequests,
         },
         HttpStatusCodes.OK
       )
@@ -71,11 +75,14 @@ export const ADMIN_ROUTE_HANDLER: HandlerMapFromRoutes<typeof ADMIN_ROUTES> = {
         return c.json({ message: 'Request not found', success: false }, HttpStatusCodes.NOT_FOUND)
       }
 
+      // Convert image URLs to signed URLs
+      const processedRequest = await convertImagesToSignedUrls(request)
+
       return c.json(
         {
           message: 'Request retrieved successfully',
           success: true,
-          data: request,
+          data: processedRequest,
         },
         HttpStatusCodes.OK
       )
@@ -108,6 +115,29 @@ export const ADMIN_ROUTE_HANDLER: HandlerMapFromRoutes<typeof ADMIN_ROUTES> = {
 
       if (!approvedRequest) {
         return c.json({ message: 'Request not found', success: false }, HttpStatusCodes.NOT_FOUND)
+      }
+
+      // Send approval email based on request type
+      const loginLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/login`
+
+      try {
+        if (approvedRequest.request_type === 'DOCTOR' && approvedRequest.entity?.user) {
+          const doctorName = approvedRequest.entity.user.name || approvedRequest.entity.user.email
+          await emailHelpers.sendPractitionerAccountApproved(approvedRequest.entity.user.email, {
+            practitionerName: doctorName,
+            loginLink,
+          })
+        } else if (approvedRequest.request_type === 'CLINIC' && approvedRequest.user) {
+          // For clinic, entity is the clinic object, user is the clinic owner
+          const clinicName = approvedRequest.entity?.clinic_name || approvedRequest.user.name || approvedRequest.user.email
+          await emailHelpers.sendClinicAccountApproved(approvedRequest.user.email, {
+            clinicName,
+            loginLink,
+          })
+        }
+      } catch (emailError) {
+        // Log email error but don't fail the request
+        console.error('Error sending approval email:', emailError)
       }
 
       return c.json(
@@ -993,11 +1023,14 @@ export const ADMIN_ROUTE_HANDLER: HandlerMapFromRoutes<typeof ADMIN_ROUTES> = {
         roleDetail: member.dynamicRole,
       }))
 
+      // Convert image URLs to signed URLs
+      const processedTeamMembers = await convertImagesToSignedUrls(transformedTeamMembers)
+
       return c.json(
         {
           message: 'Team members retrieved successfully',
           success: true,
-          data: transformedTeamMembers,
+          data: processedTeamMembers,
         },
         HttpStatusCodes.OK
       )

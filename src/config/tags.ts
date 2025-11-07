@@ -12,6 +12,7 @@ export const API_TAGS = {
   APPOINTMENT: 'Appointment',
   SERVICE: 'Service',
   ADMIN: 'Admin',
+  STORAGE: 'Storage',
 } as const
 
 export type ApiTag = (typeof API_TAGS)[keyof typeof API_TAGS]

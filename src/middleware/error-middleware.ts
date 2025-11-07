@@ -6,7 +6,25 @@ import { ZodError } from 'zod'
 import { HttpError } from '~/lib/error'
 
 const onError: ErrorHandler = (err, c) => {
-  console.error(err)
+  const errorDetails = {
+    message: err.message,
+    stack: err.stack,
+    name: err.name,
+    path: c.req.path,
+    method: c.req.method,
+  }
+
+  console.error('❌ [error-middleware] Error caught:', errorDetails)
+
+  // Log full error object for debugging
+  if (c.req.path === '/doc') {
+    console.error('❌ [error-middleware] /doc endpoint error details:', {
+      ...errorDetails,
+      error: err,
+      errorString: String(err),
+      errorJSON: JSON.stringify(err, Object.getOwnPropertyNames(err)),
+    })
+  }
 
   // 🧩 1. Handle validation errors from Zod (v4)
   if (err instanceof ZodError) {
@@ -48,6 +66,7 @@ const onError: ErrorHandler = (err, c) => {
       success: false,
       message: err.message || Phrases.INTERNAL_SERVER_ERROR,
       stack: env === 'production' ? undefined : err.stack,
+      ...(c.req.path === '/doc' && env === 'development' ? { errorDetails } : {}),
     },
     statusCode as ContentfulStatusCode
   )

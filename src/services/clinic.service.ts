@@ -1,5 +1,31 @@
 import prisma from '~/lib/prisma'
 import { approvalService } from './approval.service'
+import { emailHelpers } from '~/lib/email/service'
+
+async function findClinicForUser(userId: string) {
+  const clinicDirect = await prisma.clinic.findFirst({
+    where: { user_id: userId },
+    include: { user: true, address: true },
+  })
+
+  if (clinicDirect) {
+    return clinicDirect
+  }
+
+  const doctor = await prisma.doctor.findUnique({
+    where: { user_id: userId },
+    select: { clinic_id: true },
+  })
+
+  if (!doctor?.clinic_id) {
+    return null
+  }
+
+  return prisma.clinic.findUnique({
+    where: { id: doctor.clinic_id },
+    include: { user: true, address: true },
+  })
+}
 
 export const clinicService = {
   async getClinicByUserId(userId: string) {
@@ -125,40 +151,40 @@ export const clinicService = {
     })
   },
 
+  /**
+   * Update clinic profile by user ID without changing onboarding stage
+   * Simple update - no approval routing
+   */
   // biome-ignore lint/suspicious/noExplicitAny: Clinic update data can have various shapes
-  async updateClinicByUserId(userId: string, data: any) {
-    // First, try to find clinic directly linked to user via user_id
-    const clinicDirect = await prisma.clinic.findFirst({
-      where: { user_id: userId },
-    })
-
-    let clinicId: string | null = null
-
-    if (clinicDirect) {
-      clinicId = clinicDirect.id
-    } else {
-      // If not found, check if user is a doctor and get their clinic
-      const doctor = await prisma.doctor.findUnique({
-        where: { user_id: userId },
-        select: { clinic_id: true },
-      })
-
-      if (!doctor?.clinic_id) {
-        return null
-      }
-
-      clinicId = doctor.clinic_id
+  async updateClinicByUserIdSimple(userId: string, data: any) {
+    const clinic = await findClinicForUser(userId)
+    if (!clinic) {
+      return null
     }
 
-    // Update the clinic if we found one
     const updatedClinic = await prisma.clinic.update({
-      where: { id: clinicId },
+      where: { id: clinic.id },
       data,
       include: { user: true, address: true },
     })
 
-    // Create or update approval request
-    await approvalService.createRequest(userId, 'CLINIC', clinicId, data)
+    return updatedClinic
+  },
+
+  // biome-ignore lint/suspicious/noExplicitAny: Clinic update data can have various shapes
+  async updateClinicByUserId(userId: string, data: any) {
+    const clinic = await findClinicForUser(userId)
+    if (!clinic) {
+      return null
+    }
+
+    const updatedClinic = await prisma.clinic.update({
+      where: { id: clinic.id },
+      data,
+      include: { user: true, address: true },
+    })
+
+    await approvalService.createRequest(userId, 'CLINIC', updatedClinic.id, data)
 
     // Update user's onboarding_stage to CLINIC_APPROVAL_PENDING after profile update
     const updatedUser = await prisma.user.update({
@@ -168,6 +194,52 @@ export const clinicService = {
     })
 
     return { clinic: updatedClinic, onboarding_stage: updatedUser.onboarding_stage }
+  },
+
+  // biome-ignore lint/suspicious/noExplicitAny: Clinic update data can have various shapes
+  async notifyClinicDocumentsUpdate(userId: string, data: any) {
+    const clinic = await findClinicForUser(userId)
+    if (!clinic) {
+      return null
+    }
+
+    const updatedClinic = await prisma.clinic.update({
+      where: { id: clinic.id },
+      data,
+      include: { user: true, address: true },
+    })
+
+    const adminUsers = await prisma.user.findMany({
+      where: {
+        role: {
+          equals: 'ADMIN',
+          mode: 'insensitive',
+        },
+      },
+      select: {
+        email: true,
+      },
+    })
+
+    const adminEmails = adminUsers
+      .map(user => user.email)
+      .filter((email): email is string => Boolean(email))
+
+    const updatedAtIso = new Date().toISOString()
+
+    if (adminEmails.length) {
+      await emailHelpers.notifyAdminsClinicDocumentsUpdated(adminEmails, {
+        clinicName: updatedClinic.clinic_name,
+        clinicEmail: updatedClinic.user?.email || 'Not provided',
+        updatedAt: updatedAtIso,
+      })
+    }
+
+    return {
+      clinic: updatedClinic,
+      notificationTarget: adminEmails.length ? 'admin' : 'none',
+      updatedAt: updatedAtIso,
+    }
   },
 
   /**

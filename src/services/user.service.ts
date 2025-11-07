@@ -78,6 +78,8 @@ export const userService = {
             clinic_name: clinicName,
             email: currentUser.email,
             phone_number: currentUser.phone_no,
+            user_id: userId,
+            is_active: true,
           },
         })
 
@@ -85,12 +87,12 @@ export const userService = {
           data: {
             user_id: userId,
             clinic_id: clinic.id,
+
             specialization: 'Administrator',
             license_number: `ADMIN-${userId.slice(0, 8)}`,
           },
         })
 
-        console.log(`✅ Created clinic ${clinic.id} for user ${userId}`)
       }
     } else if (role === 'DOCTOR') {
       const existingDoctor = await prisma.doctor.findUnique({
@@ -106,7 +108,6 @@ export const userService = {
           },
         })
 
-        console.log(`✅ Created doctor record for user ${userId}`)
       }
     } else if (role === 'PATIENT') {
       const existingPatient = await prisma.patient.findUnique({
@@ -122,7 +123,6 @@ export const userService = {
           },
         })
 
-        console.log(`✅ Created patient record for user ${userId}`)
       }
     }
 
@@ -137,14 +137,12 @@ export const userService = {
           patientName: userName,
           loginLink,
         })
-        console.log(`✅ Sent welcome email to patient: ${currentUser.email}`)
       } else if (role === 'CLINIC' || role === 'DOCTOR') {
         await emailHelpers.sendGenericWelcomeEmail(currentUser.email, {
           name: userName,
           role,
           loginLink,
         })
-        console.log(`✅ Sent welcome email to ${role}: ${currentUser.email}`)
       }
     } catch (error) {
       console.error(`❌ Error sending welcome email to ${currentUser.email}:`, error)
