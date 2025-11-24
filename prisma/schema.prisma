@@ -138,22 +138,35 @@ model Address {
 }
 
 model Service {
-  id               String        @id @default(cuid())
+  id               String             @id @default(cuid())
   service_name     String
   description      String?
-  price            Float
-  duration_minutes Int?
-  is_active        Boolean       @default(true)
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  clinic_id        String
-  clinic           Clinic        @relation(fields: [clinic_id], references: [id], onDelete: Cascade)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  conditions_count Int                @default(0)
+  clinic_id        String?
+  clinic           Clinic?            @relation(fields: [clinic_id], references: [id], onDelete: Cascade)
   doctor_id        String?
-  doctor           Doctor?       @relation(fields: [doctor_id], references: [id])
+  doctor           Doctor?            @relation(fields: [doctor_id], references: [id])
   appointments     Appointment[]
   cart_items       Cart[]
+  conditions       ServiceCondition[]
 
   @@map("service")
+}
+
+model ServiceCondition {
+  id               String   @id @default(cuid())
+  name             String
+  description      String?
+  price            Float
+  offer_as_product Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  service_id       String
+  service          Service  @relation(fields: [service_id], references: [id], onDelete: Cascade)
+
+  @@map("service_condition")
 }
 
 model Appointment {
@@ -182,16 +195,17 @@ model Appointment {
 }
 
 model Appointment_Slot {
-  id           String        @id @default(cuid())
-  slot_date    DateTime
-  start_time   String
-  end_time     String
-  is_available Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  doctor_id    String
-  doctor       Doctor        @relation(fields: [doctor_id], references: [id], onDelete: Cascade)
-  appointments Appointment[]
+  id                String        @id @default(cuid())
+  slot_date         DateTime
+  start_time        String
+  end_time          String
+  is_available      Boolean       @default(true)
+  consultation_type String        @default("BOTH") // BOTH, IN_PERSON, VIDEO_CALL
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  doctor_id         String
+  doctor            Doctor        @relation(fields: [doctor_id], references: [id], onDelete: Cascade)
+  appointments      Appointment[]
 
   @@map("appointment_slot")
 }

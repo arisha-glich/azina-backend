@@ -151,6 +151,29 @@ export const clinicService = {
     })
   },
 
+  async getClinicServicesWithConditions(clinicId: string) {
+    const clinicExists = await prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: { id: true },
+    })
+
+    if (!clinicExists) {
+      return null
+    }
+
+    const services = await prisma.service.findMany({
+      where: { clinic_id: clinicId },
+      include: {
+        conditions: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    })
+
+    return services
+  },
+
   /**
    * Update clinic profile by user ID without changing onboarding stage
    * Simple update - no approval routing

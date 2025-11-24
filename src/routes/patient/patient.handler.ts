@@ -98,4 +98,3 @@ export const PATIENT_ROUTE_HANDLER: HandlerMapFromRoutes<typeof PATIENT_ROUTES> 
   },
 }
 
-

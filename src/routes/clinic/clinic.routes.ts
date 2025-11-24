@@ -4,7 +4,7 @@ import { jsonContent, jsonContentRequired } from 'stoker/openapi/helpers'
 import { z } from 'zod'
 import { API_TAGS } from '~/config/tags'
 import { zodResponseSchema } from '~/lib/zod-helper'
-import { ClinicSchema, DoctorSchema, UserSchema } from '~/zod/models'
+import { ClinicSchema, DoctorSchema, ServiceConditionSchema, ServiceSchema, UserSchema } from '~/zod/models'
 
 // Schema for updating clinic fields
 const ClinicUpdateSchema = z.object({
@@ -152,6 +152,14 @@ const RequestItemSchema = z.object({
     type: 'object',
   }),
   user: z.object({ id: z.string(), email: z.string(), name: z.string().nullable().optional() }),
+})
+
+const ServiceWithConditionsSchema = ServiceSchema.extend({
+  conditions: z.array(ServiceConditionSchema),
+})
+
+const ClinicServicesResponseSchema = z.object({
+  services: z.array(ServiceWithConditionsSchema),
 })
 
 export const CLINIC_ROUTES = {
@@ -542,6 +550,44 @@ export const CLINIC_ROUTES = {
       ),
       [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
         z.object({ message: z.string(), success: z.boolean() }),
+        'Internal server error'
+      ),
+    },
+  }),
+
+  get_clinic_services: createRoute({
+    method: 'get',
+    tags: [API_TAGS.CLINIC],
+    path: '/{id}/services',
+    summary: 'List services for a clinic by ID',
+    description:
+      'Retrieve all services and their conditions for the specified clinic ID. Useful for public listings or admin views.',
+    request: {
+      params: z.object({
+        id: z.string().openapi({
+          param: { name: 'id', in: 'path' },
+          description: 'Clinic ID',
+          example: 'cln_123',
+        }),
+      }),
+    },
+    responses: {
+      [HttpStatusCodes.OK]: jsonContent(
+        zodResponseSchema(ClinicServicesResponseSchema),
+        'Clinic services retrieved successfully'
+      ),
+      [HttpStatusCodes.NOT_FOUND]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+        }),
+        'Clinic not found'
+      ),
+      [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+        }),
         'Internal server error'
       ),
     },

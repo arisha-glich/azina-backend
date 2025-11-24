@@ -51,16 +51,10 @@ export const auth = betterAuth({
     }),
     organization({
       allowUserToCreateOrganization: async user => {
-        // Only CLINIC users or ADMIN can create organizations
         return user.role === 'CLINIC' || isAdminRole(user.role)
       },
       organizationLimit: 100,
       creatorRole: 'owner',
-
-      sendInvitationEmail: async data => {
-        const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL}/accept-invitation?token=${data.id}`
-        // TODO: Implement email service
-      },
     }),
     openAPI({
       theme: 'kepler',

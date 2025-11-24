@@ -46,6 +46,43 @@ export const DOCTOR_ROUTE_HANDLER: HandlerMapFromRoutes<typeof DOCTOR_ROUTES> = 
     }
   },
 
+  get_my_clinic_link_status: async c => {
+    try {
+      const user = c.get('user')
+
+      if (!user?.id) {
+        return c.json({ message: 'Unauthorized', success: false }, HttpStatusCodes.UNAUTHORIZED)
+      }
+
+      const status = await doctorService.getClinicLinkStatusByUserId(user.id)
+
+      if (!status) {
+        return c.json(
+          {
+            message: 'Doctor profile not found. Please ensure your user role is set to DOCTOR.',
+            success: false,
+          },
+          HttpStatusCodes.NOT_FOUND
+        )
+      }
+
+      return c.json(
+        {
+          message: 'Clinic link status retrieved successfully',
+          success: true,
+          data: status,
+        },
+        HttpStatusCodes.OK
+      )
+    } catch (error) {
+      console.error('Error retrieving clinic link status:', error)
+      return c.json(
+        { message: 'Internal server error', success: false },
+        HttpStatusCodes.INTERNAL_SERVER_ERROR
+      )
+    }
+  },
+
   update_my_doctor: async c => {
     try {
       const userId = c.get('user')?.id

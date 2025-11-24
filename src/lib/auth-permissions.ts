@@ -7,14 +7,6 @@ import prisma from '~/lib/prisma'
  */
 export const SYSTEM_ROLES = ['ADMIN', 'DOCTOR', 'PATIENT', 'CLINIC'] as const
 export type SystemRole = (typeof SYSTEM_ROLES)[number]
-
-/**
- * Check if a role is admin (case-insensitive)
- *
- * Accepts: "ADMIN", "Admin", "admin", or any case variation
- * Returns true for all variations, ensuring ADMIN users have full permissions
- * regardless of how the role is stored in the database.
- */
 export function isAdminRole(role?: string | null): boolean {
   if (!role) {
     return false
@@ -39,9 +31,6 @@ export function isSystemRole(role: string): boolean {
   return SYSTEM_ROLES.includes(role.trim().toUpperCase() as SystemRole)
 }
 
-/**
- * Extended access control statements
- */
 const statement = {
   ...defaultStatements,
   user: ['create', 'update', 'delete', 'ban', 'unban', 'view', 'list'],

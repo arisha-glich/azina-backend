@@ -6,5 +6,5 @@ export const DEFAULT_FROM_EMAIL = {
   info: 'info@teleneo.com',
 } as const
 export type IDefaultEmail = keyof typeof DEFAULT_FROM_EMAIL
-export const COMPANY_NAME = 'Teleneo'
+export const COMPANY_NAME = 'Azina Healthcare'
 export const API_START_POINT = '/api/v1'

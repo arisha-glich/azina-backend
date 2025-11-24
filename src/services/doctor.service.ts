@@ -13,6 +13,46 @@ export const doctorService = {
     })
   },
 
+  async getClinicLinkStatusByUserId(userId: string) {
+    const doctor = await prisma.doctor.findUnique({
+      where: { user_id: userId },
+      select: {
+        id: true,
+        clinic_id: true,
+        clinic: {
+          select: {
+            id: true,
+            clinic_name: true,
+            is_active: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+      },
+    })
+
+    if (!doctor) {
+      return null
+    }
+
+    const clinicInfo = doctor.clinic
+      ? {
+          id: doctor.clinic.id,
+          clinic_name: doctor.clinic.clinic_name,
+          is_active: doctor.clinic.is_active,
+          createdAt: doctor.clinic.createdAt,
+          updatedAt: doctor.clinic.updatedAt,
+        }
+      : null
+
+    return {
+      doctor_id: doctor.id,
+      clinic_id: doctor.clinic_id,
+      linked: Boolean(doctor.clinic_id),
+      clinic: clinicInfo,
+    }
+  },
+
   /**
    * Get all doctors approved by admin (onboarding_stage = 'APPROVED_BY_ADMIN')
    */

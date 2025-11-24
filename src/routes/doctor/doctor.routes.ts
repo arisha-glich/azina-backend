@@ -6,6 +6,25 @@ import { API_TAGS } from '~/config/tags'
 import { zodResponseSchema } from '~/lib/zod-helper'
 import { DoctorSchema } from '~/zod/models'
 
+const ClinicSummarySchema = z
+  .object({
+    id: z.string(),
+    clinic_name: z.string().nullable(),
+    is_active: z.boolean(),
+    createdAt: z.date(),
+    updatedAt: z.date(),
+  })
+  .openapi({ description: 'Summary of the linked clinic, if present' })
+
+const DoctorClinicLinkStatusSchema = z
+  .object({
+    doctor_id: z.string(),
+    clinic_id: z.string().nullable(),
+    linked: z.boolean(),
+    clinic: ClinicSummarySchema.nullable(),
+  })
+  .openapi({ description: 'Clinic link status for the authenticated doctor' })
+
 // Schema for updating doctor fields
 const DoctorUpdateSchema = z.object({
   specialization: z.string().optional().openapi({
@@ -183,6 +202,43 @@ export const DOCTOR_ROUTES = {
           success: z.boolean(),
         }),
         'Doctor not found'
+      ),
+      [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+        }),
+        'Unauthorized'
+      ),
+      [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+        }),
+        'Internal server error'
+      ),
+    },
+  }),
+
+  get_my_clinic_link_status: createRoute({
+    method: 'get',
+    tags: [API_TAGS.DOCTOR],
+    path: '/me/clinic-link',
+    summary: 'Check if current doctor is linked to a clinic',
+    description:
+      'Returns whether the authenticated doctor profile is currently linked to a clinic and basic clinic information when available.',
+    request: {},
+    responses: {
+      [HttpStatusCodes.OK]: jsonContent(
+        zodResponseSchema(DoctorClinicLinkStatusSchema),
+        'Clinic link status retrieved successfully'
+      ),
+      [HttpStatusCodes.NOT_FOUND]: jsonContent(
+        z.object({
+          message: z.string(),
+          success: z.boolean(),
+        }),
+        'Doctor profile not found'
       ),
       [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
         z.object({

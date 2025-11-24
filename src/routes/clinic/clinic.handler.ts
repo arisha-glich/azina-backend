@@ -498,6 +498,35 @@ export const CLINIC_ROUTE_HANDLER: HandlerMapFromRoutes<typeof CLINIC_ROUTES> = 
     }
   },
 
+  get_clinic_services: async c => {
+    try {
+      const { id } = c.req.valid('param')
+
+      const services = await clinicService.getClinicServicesWithConditions(id)
+
+      if (!services) {
+        return c.json({ message: 'Clinic not found', success: false }, 404)
+      }
+
+      return c.json(
+        {
+          message: 'Clinic services retrieved successfully',
+          success: true,
+          data: {
+            services,
+          },
+        },
+        HttpStatusCodes.OK
+      )
+    } catch (error) {
+      console.error('Error retrieving clinic services:', error)
+      return c.json(
+        { message: 'Internal server error', success: false },
+        HttpStatusCodes.INTERNAL_SERVER_ERROR
+      )
+    }
+  },
+
   create_doctor: async c => {
     try {
       // Get logged-in user from session

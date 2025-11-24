@@ -1,0 +1,93 @@
+# Doctor Clinic Link Status API
+
+## Base URL
+```
+http://localhost:8080/api/v1/doctor
+```
+
+## Overview
+This endpoint lets an authenticated doctor (or clinic acting on the doctor account) verify whether their doctor profile is linked to a clinic. It returns a simple boolean and, when a clinic is attached, a snapshot of the clinic record.
+
+---
+
+## Endpoint
+
+### Get Clinic Link Status
+- **Method:** `GET`
+- **Path:** `/me/clinic-link`
+- **Description:** Returns whether the current doctor profile is attached to a clinic. If linked, the response includes the clinic’s basic details.
+
+#### Request
+- **Headers:**
+  - `Authorization: Bearer <token>` (or active session cookie)
+- **Body:** None
+
+#### Response
+- **Status 200:**
+  ```json
+  {
+    "message": "Clinic link status retrieved successfully",
+    "success": true,
+    "data": {
+      "doctor_id": "doc_123",
+      "clinic_id": "cln_456",
+      "linked": true,
+      "clinic": {
+        "id": "cln_456",
+        "clinic_name": "Downtown Health",
+        "is_active": true,
+        "createdAt": "2025-11-07T09:30:12.000Z",
+        "updatedAt": "2025-11-07T09:30:12.000Z"
+      }
+    }
+  }
+  ```
+- **Status 200 (no clinic):**
+  ```json
+  {
+    "message": "Clinic link status retrieved successfully",
+    "success": true,
+    "data": {
+      "doctor_id": "doc_123",
+      "clinic_id": null,
+      "linked": false,
+      "clinic": null
+    }
+  }
+  ```
+- **Status 401:** Missing or invalid authentication (`{"message":"Unauthorized","success":false}`)
+- **Status 404:** Doctor profile not found for the authenticated user.
+
+#### Error Cases
+| Status | Reason |
+| ------ | ------ |
+| 401 | No active session / token missing |
+| 404 | Authenticated user does not have a doctor profile |
+| 500 | Unexpected server error |
+
+---
+
+## Usage Notes
+- Clinics acting as administrators for doctor accounts should call this endpoint with the doctor’s authenticated session.
+- The `linked` flag is ideal for driving onboarding flows (e.g., prompt standalone doctors to join a clinic if `false`).
+- `clinic` is `null` when no clinic is attached, so frontends should guard against missing clinic details.
+
+---
+
+## Sample cURL
+```bash
+curl -X GET "http://localhost:8080/api/v1/doctor/me/clinic-link" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## Related Files
+- `src/routes/doctor/doctor.routes.ts`
+- `src/routes/doctor/doctor.handler.ts`
+- `src/services/doctor.service.ts`
+
+---
+
+## Change Log
+- Added `/me/clinic-link` endpoint to expose doctor-clinic linkage status.

@@ -1,0 +1,312 @@
+# Service & Condition Management API Documentation
+
+## Base URL
+```
+http://localhost:8080/api/v1/services
+```
+
+## Overview
+Clinics and standalone doctors can create and manage billable services along with optional per-service conditions (e.g., offers) that expose `offer_as_product` flags. Doctors assigned to a clinic must coordinate service changes through the clinic account and cannot manage services directly.
+
+---
+
+## Authentication & Role Requirements
+- All endpoints require a valid session token.
+- Accepted roles:
+  - `CLINIC` users manage services owned by their clinic.
+  - `DOCTOR` users must be **standalone** (no `clinic_id` linked). Clinic-affiliated doctors receive `403 FORBIDDEN`.
+
+Request header example:
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+---
+
+## Data Model Snapshot
+- `Service`
+  - `service_name` (string, required)
+  - `description` (string | null)
+  - `clinic_id` (string | null)
+  - `doctor_id` (string | null)
+  - `conditions_count` (number, managed automatically)
+  - `conditions` (array of `ServiceCondition`)
+- `ServiceCondition`
+  - `name` (string, required)
+  - `description` (string | null)
+  - `price` (number, required)
+  - `offer_as_product` (boolean, required)
+
+> **Note:** Run `npx prisma migrate dev` (or your deployment migration command) followed by `npx prisma generate` so the Prisma client reflects these entities.
+
+---
+
+## Endpoints
+
+### List Services
+- **Endpoint:** `GET /`
+- **Summary:** Fetch all services owned by the authenticated clinic or standalone doctor.
+- **Success (200):**
+  ```json
+  {
+    "message": "Services retrieved successfully",
+    "success": true,
+    "data": {
+      "services": [
+        {
+          "id": "svc_123",
+          "service_name": "General Consultation",
+          "description": "Overview of clinic offerings",
+          "conditions_count": 1,
+          "clinic_id": "cln_abc",
+          "doctor_id": null,
+          "createdAt": "2025-11-07T10:00:00.000Z",
+          "updatedAt": "2025-11-07T10:00:00.000Z",
+          "conditions": [
+            {
+              "id": "cond_456",
+              "name": "Intro Offer",
+              "description": "First visit discounted",
+              "price": 150,
+              "offer_as_product": true,
+              "service_id": "svc_123",
+              "createdAt": "2025-11-07T10:00:00.000Z",
+              "updatedAt": "2025-11-07T10:00:00.000Z"
+            }
+          ]
+        }
+      ]
+    }
+  }
+  ```
+- **Errors:** `401 UNAUTHORIZED`, `403 FORBIDDEN`
+
+### List Services By Clinic ID (Public)
+- **Endpoint:** `GET /api/v1/clinic/{clinicId}/services`
+- **Summary:** Fetch all services (with conditions) for a specific clinic, identified by its public ID.
+- **Description:** Intended for client-side listings where clinics are browsed by patients or admins. No authentication is required.
+- **Success (200):**
+  ```json
+  {
+    "message": "Clinic services retrieved successfully",
+    "success": true,
+    "data": {
+      "services": [
+        {
+          "id": "svc_123",
+          "service_name": "General Consultation",
+          "description": "Overview of clinic offerings",
+          "conditions_count": 1,
+          "clinic_id": "cln_abc",
+          "doctor_id": null,
+          "createdAt": "2025-11-07T10:00:00.000Z",
+          "updatedAt": "2025-11-07T10:00:00.000Z",
+          "conditions": [
+            {
+              "id": "cond_456",
+              "name": "Intro Offer",
+              "description": "First visit discounted",
+              "price": 150,
+              "offer_as_product": true,
+              "service_id": "svc_123",
+              "createdAt": "2025-11-07T10:00:00.000Z",
+              "updatedAt": "2025-11-07T10:00:00.000Z"
+            }
+          ]
+        }
+      ]
+    }
+  }
+  ```
+- **Errors:**
+  - `404 NOT FOUND`: Clinic does not exist
+  - `500 INTERNAL SERVER ERROR`: Unexpected failure
+
+### Create Service
+- **Endpoint:** `POST /`
+- **Summary:** Create a new service. Optional conditions can be supplied on creation.
+- **Request Body:**
+  ```json
+  {
+    "service_name": "General Consultation",
+    "description": "Overview of clinic offerings",
+    "conditions": [
+      {
+        "name": "Intro Offer",
+        "description": "First visit discounted",
+        "price": 150,
+        "offer_as_product": true
+      }
+    ]
+  }
+  ```
+- **Success (201):** Returns the created service object (same shape as list response item).
+- **Errors:** `400 BAD REQUEST`, `401 UNAUTHORIZED`, `403 FORBIDDEN`
+
+### Get Service By ID
+- **Endpoint:** `GET /{serviceId}`
+- **Summary:** Retrieve a specific service belonging to the authenticated owner.
+- **Success (200):** Service object (with `conditions` and `conditions_count`).
+- **Errors:** `401`, `403`, `404`
+
+### Update Service
+- **Endpoint:** `PATCH /{serviceId}`
+- **Summary:** Partially update a service (fields optional).
+- **Request Body Example:**
+  ```json
+  {
+    "service_name": "Updated Consultation",
+    "description": "Refined overview of services"
+  }
+  ```
+- **Success (200):** Updated service object.
+- **Errors:** `400`, `401`, `403`, `404`
+
+### Delete Service
+- **Endpoint:** `DELETE /{serviceId}`
+- **Summary:** Permanently remove a service and all nested conditions.
+- **Success (200):** Deleted service payload for confirmation.
+- **Errors:** `401`, `403`, `404`
+
+### List Conditions
+- **Endpoint:** `GET /{serviceId}/conditions`
+- **Summary:** List all conditions for a service.
+- **Success (200):**
+  ```json
+  {
+    "message": "Service conditions retrieved successfully",
+    "success": true,
+    "data": {
+      "conditions": [
+        {
+          "id": "cond_456",
+          "name": "Intro Offer",
+          "description": "First visit discounted",
+          "price": 150,
+          "offer_as_product": true,
+          "service_id": "svc_123",
+          "createdAt": "2025-11-07T10:00:00.000Z",
+          "updatedAt": "2025-11-07T10:00:00.000Z"
+        }
+      ]
+    }
+  }
+  ```
+- **Errors:** `401`, `403`, `404`
+
+### Create Condition
+- **Endpoint:** `POST /{serviceId}/conditions`
+- **Request Body:**
+  ```json
+  {
+    "name": "Intro Offer",
+    "description": "First visit discounted",
+    "price": 150,
+    "offer_as_product": true
+  }
+  ```
+- **Success (201):** Newly created condition.
+- **Errors:** `400`, `401`, `403`, `404`
+
+### Update Condition
+- **Endpoint:** `PATCH /{serviceId}/conditions/{conditionId}`
+- **Request Body (partial):**
+  ```json
+  {
+    "price": 125,
+    "offer_as_product": false
+  }
+  ```
+- **Success (200):** Updated condition.
+- **Errors:** `400`, `401`, `403`, `404`
+
+### Delete Condition
+- **Endpoint:** `DELETE /{serviceId}/conditions/{conditionId}`
+- **Success (200):** Deleted condition payload.
+- **Errors:** `401`, `403`, `404`
+
+---
+
+## Business Rules & Behavior
+- **Ownership Enforcement:** All service queries filter by the authenticated clinic or standalone doctor ID. Attempting to access another owner's service yields `404`.
+- **Clinic-Linked Doctors:** If a doctor profile has `clinic_id`, every service endpoint returns `403` instructing them to use the clinic account.
+- **Cascade Deletes:** Deleting a service removes its conditions via Prisma relation cascade.
+- **Offer Toggle:** `offer_as_product` is a required boolean per condition; use `false` when the offer is informational only.
+
+---
+
+## Validation Notes
+- `service_name`: min length 1 (backend enforces non-empty string).
+- `description`: optional string; omit or send `null`.
+- `name` (condition): min length 1.
+- `price` (condition): non-negative number.
+- `offer_as_product`: boolean (defaults to `false` when omitted).
+- `conditions_count`: read-only tracker managed by the backend (ignored on create/update input).
+
+Invalid payloads trigger `400 BAD REQUEST` with descriptive messages.
+
+---
+
+## Error Reference
+| Status | Scenario | Message (example) |
+| ------ | -------- | ----------------- |
+| 401 | Missing/invalid token | `{"message":"Unauthorized","success":false}` |
+| 403 | Clinic-linked doctor or wrong role | `{"message":"Only clinic or standalone doctor accounts can manage services.","success":false}` |
+| 404 | Service/condition not owned by requester | `{"message":"Service not found","success":false}` |
+| 500 | Unexpected failure | `{"message":"Internal server error","success":false}` |
+
+---
+
+## Quickstart (curl)
+```bash
+# Create a service with an offer
+curl -X POST "http://localhost:8080/api/v1/services" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "service_name": "Wellness Check",
+    "description": "Annual wellness exam",
+    "conditions": [
+      { "name": "Bundle Discount", "price": 200, "offer_as_product": true }
+    ]
+  }'
+
+# List services for a clinic (public)
+curl -X GET "http://localhost:8080/api/v1/clinic/cln_abc/services"
+
+# Toggle offer flag on an existing condition
+curl -X PATCH "http://localhost:8080/api/v1/services/svc_123/conditions/cond_456" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{ "price": 180, "offer_as_product": false }'
+```
+
+---
+
+## Testing Checklist
+- [ ] Clinic user can create, list, update, delete services and conditions.
+- [ ] Standalone doctor can manage services independently.
+- [ ] Clinic-linked doctor receives `403` on all service endpoints.
+- [ ] Deleting a service removes nested conditions.
+- [ ] Condition pricing and `offer_as_product` toggle correctly and persist.
+- [ ] `conditions_count` reflects the number of associated conditions after create/delete operations.
+- [ ] Public clinic services endpoint returns expected data for valid IDs and `404` for invalid IDs.
+
+---
+
+## Related Files
+- `prisma/schema.prisma`
+- `src/services/service.service.ts`
+- `src/routes/service/service.routes.ts`
+- `src/routes/service/service.handler.ts`
+- `src/routes/service/index.ts`
+- `src/app.ts`
+
+---
+
+## Release Notes
+- Added `conditions_count` tracker on services plus `ServiceCondition` pricing and `offer_as_product` flag.
+- Added public clinic services endpoint to fetch services/conditions by clinic ID.
+- Enabled optional clinic ownership for services and support for standalone doctors.
+- Published REST endpoints for service & condition CRUD with OpenAPI documentation.
